@@ -562,10 +562,18 @@ final class WS
     {
         $this->discord->logger->debug('DAVE MLS Proposals', ['data' => $data]);
 
-        if ($data instanceof BinaryFrame && DaveRuntime::isAvailable()) {
-            // TODO: Implement MLS commit/welcome generation through libdave.
-            // Intentionally no-op until full commit serialization is wired.
+        if (! ($data instanceof BinaryFrame)) {
+            return;
         }
+
+        $payload = DaveRuntime::buildMlsCommitWelcome($data->payload, $this->daveState->protocolVersion);
+        if ($payload === null) {
+            $this->sendDaveBinary(Op::VOICE_DAVE_MLS_INVALID_COMMIT_WELCOME);
+
+            return;
+        }
+
+        $this->sendDaveBinary(Op::VOICE_DAVE_MLS_COMMIT_WELCOME, $payload);
     }
 
     protected function handleDaveMlsCommitWelcome($data): void
@@ -628,6 +636,11 @@ final class WS
             Op::VOICE_DAVE_TRANSITION_READY,
             ['transition_id' => $transitionId],
         ));
+    }
+
+    public function getDaveProtocolVersion(): int
+    {
+        return $this->daveState->protocolVersion;
     }
 
     /**

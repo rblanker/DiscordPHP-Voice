@@ -20,12 +20,30 @@ use FFI;
 final class Runtime
 {
     private const DEFAULT_LIBRARY_PATH = 'libdave.so';
+    private const DAVE_FFI_DEFINITIONS = '
+        unsigned short daveMaxSupportedProtocolVersion(void);
+    ';
 
     private static bool $loaded = false;
 
     private static ?FFI $ffi = null;
 
     private static ?string $lastLoadError = null;
+
+    /**
+     * @var null|callable(string, int): ?string
+     */
+    private static $frameEncryptor = null;
+
+    /**
+     * @var null|callable(string, int): false|string|null
+     */
+    private static $frameDecryptor = null;
+
+    /**
+     * @var null|callable(string, int): ?string
+     */
+    private static $mlsCommitWelcomeBuilder = null;
 
     public static function isAvailable(): bool
     {
@@ -56,6 +74,75 @@ final class Runtime
         return self::$lastLoadError;
     }
 
+    /**
+     * @param null|callable(string, int): ?string           $frameEncryptor
+     * @param null|callable(string, int): false|string|null $frameDecryptor
+     * @param null|callable(string, int): ?string           $mlsCommitWelcomeBuilder
+     */
+    public static function configureCallbacks(
+        ?callable $frameEncryptor = null,
+        ?callable $frameDecryptor = null,
+        ?callable $mlsCommitWelcomeBuilder = null
+    ): void {
+        self::$frameEncryptor = $frameEncryptor;
+        self::$frameDecryptor = $frameDecryptor;
+        self::$mlsCommitWelcomeBuilder = $mlsCommitWelcomeBuilder;
+    }
+
+    public static function encryptMediaFrame(string $frame, int $protocolVersion): ?string
+    {
+        if ($protocolVersion <= 0) {
+            return $frame;
+        }
+
+        if (is_callable(self::$frameEncryptor)) {
+            return (self::$frameEncryptor)($frame, $protocolVersion);
+        }
+
+        if (! self::isAvailable()) {
+            return null;
+        }
+
+        // Not yet wired to the published libdave frame API in this package.
+        return null;
+    }
+
+    public static function decryptMediaFrame(string $frame, int $protocolVersion): string|false|null
+    {
+        if ($protocolVersion <= 0) {
+            return $frame;
+        }
+
+        if (is_callable(self::$frameDecryptor)) {
+            return (self::$frameDecryptor)($frame, $protocolVersion);
+        }
+
+        if (! self::isAvailable()) {
+            return null;
+        }
+
+        // Not yet wired to the published libdave frame API in this package.
+        return null;
+    }
+
+    public static function buildMlsCommitWelcome(string $proposalsPayload, int $protocolVersion): ?string
+    {
+        if ($protocolVersion <= 0) {
+            return null;
+        }
+
+        if (is_callable(self::$mlsCommitWelcomeBuilder)) {
+            return (self::$mlsCommitWelcomeBuilder)($proposalsPayload, $protocolVersion);
+        }
+
+        if (! self::isAvailable()) {
+            return null;
+        }
+
+        // Not yet wired to the published libdave MLS APIs in this package.
+        return null;
+    }
+
     private static function load(): void
     {
         if (self::$loaded) {
@@ -77,9 +164,7 @@ final class Runtime
 
         try {
             self::$ffi = FFI::cdef(
-                '
-                unsigned short daveMaxSupportedProtocolVersion(void);
-            ',
+                self::DAVE_FFI_DEFINITIONS,
                 $libraryPath
             );
         } catch (\Throwable $e) {

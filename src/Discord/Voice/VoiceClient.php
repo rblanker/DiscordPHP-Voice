@@ -20,6 +20,7 @@ use Discord\Exceptions\FileNotFoundException;
 use Discord\Voice\Exceptions\Channels\AudioAlreadyPlayingException;
 use Discord\Voice\Exceptions\ClientNotReadyException;
 use Discord\Voice\Exceptions\Libraries\OutdatedDCAException;
+use Discord\Voice\Dave\Runtime as DaveRuntime;
 use Discord\Voice\Helpers\Buffer as RealBuffer;
 use Discord\Helpers\Collection;
 use Discord\Helpers\ExCollectionInterface;
@@ -1165,7 +1166,26 @@ class VoiceClient extends EventEmitter
      */
     public function encryptDaveFrame(string $frame): string
     {
-        return $frame;
+        if (! isset($this->udp?->ws)) {
+            return $frame;
+        }
+
+        $protocolVersion = $this->udp->ws->getDaveProtocolVersion();
+        if ($protocolVersion <= 0) {
+            return $frame;
+        }
+
+        $encrypted = DaveRuntime::encryptMediaFrame($frame, $protocolVersion);
+        if (! is_string($encrypted)) {
+            return $frame;
+        }
+
+        $this->discord->getLogger()->debug('Encrypted outgoing DAVE frame.', [
+            'protocol_version' => $protocolVersion,
+            'frame_length' => strlen($encrypted),
+        ]);
+
+        return $encrypted;
     }
 
     /**
@@ -1173,7 +1193,35 @@ class VoiceClient extends EventEmitter
      */
     public function decryptDaveFrame(string $frame): string|false
     {
-        return $frame;
+        if (! isset($this->udp?->ws)) {
+            return $frame;
+        }
+
+        $protocolVersion = $this->udp->ws->getDaveProtocolVersion();
+        if ($protocolVersion <= 0) {
+            return $frame;
+        }
+
+        $decrypted = DaveRuntime::decryptMediaFrame($frame, $protocolVersion);
+        if ($decrypted === false) {
+            return false;
+        }
+
+        if ($decrypted === null) {
+            $this->discord->getLogger()->warning('Failed to decrypt incoming DAVE frame.', [
+                'protocol_version' => $protocolVersion,
+                'frame_length' => strlen($frame),
+            ]);
+
+            return false;
+        }
+
+        $this->discord->getLogger()->debug('Decrypted incoming DAVE frame.', [
+            'protocol_version' => $protocolVersion,
+            'frame_length' => strlen($decrypted),
+        ]);
+
+        return $decrypted;
     }
 
     /**
