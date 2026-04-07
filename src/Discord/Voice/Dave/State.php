@@ -20,6 +20,17 @@ final class State
     /** @var array<string, bool> */
     private array $recognizedUserIds = [];
 
+    /** @var array<string, DecryptorHandle> */
+    private array $decryptors = [];
+
+    public ?SessionHandle $session = null;
+
+    public ?EncryptorHandle $encryptor = null;
+
+    public ?string $selfUserId = null;
+
+    public ?int $groupId = null;
+
     public int $protocolVersion = 0;
 
     public ?int $epoch = null;
@@ -28,9 +39,24 @@ final class State
 
     public ?int $pendingProtocolVersion = null;
 
+    public ?int $latestPreparedTransitionVersion = null;
+
     public bool $passthroughMode = true;
 
     public ?string $externalSenderPackage = null;
+
+    public ?int $lastReceivedSequence = null;
+
+    public function __destruct()
+    {
+        $this->close();
+    }
+
+    public function setIdentity(int|string $selfUserId, int|string|null $groupId): void
+    {
+        $this->selfUserId = (string) $selfUserId;
+        $this->groupId = $groupId === null ? null : (int) $groupId;
+    }
 
     public function setProtocolVersion(int $version): void
     {
@@ -42,6 +68,10 @@ final class State
     {
         $this->pendingTransitionId = $transitionId;
         $this->pendingProtocolVersion = $protocolVersion;
+
+        if ($protocolVersion !== null) {
+            $this->latestPreparedTransitionVersion = $protocolVersion;
+        }
     }
 
     public function executeTransition(int $transitionId): void
@@ -63,6 +93,85 @@ final class State
         $this->epoch = $epoch;
     }
 
+    public function recordGatewaySequence(?int $sequence): void
+    {
+        if ($sequence === null) {
+            return;
+        }
+
+        $this->lastReceivedSequence = $sequence;
+    }
+
+    public function replaceSession(?SessionHandle $session): void
+    {
+        if ($this->session !== null && $this->session !== $session) {
+            $this->session->destroy();
+        }
+
+        $this->session = $session;
+    }
+
+    public function replaceEncryptor(?EncryptorHandle $encryptor): void
+    {
+        if ($this->encryptor !== null && $this->encryptor !== $encryptor) {
+            $this->encryptor->destroy();
+        }
+
+        $this->encryptor = $encryptor;
+    }
+
+    public function setDecryptor(int|string $userId, ?DecryptorHandle $decryptor): void
+    {
+        $userId = (string) $userId;
+
+        if (isset($this->decryptors[$userId]) && $this->decryptors[$userId] !== $decryptor) {
+            $this->decryptors[$userId]->destroy();
+        }
+
+        if ($decryptor === null) {
+            unset($this->decryptors[$userId]);
+
+            return;
+        }
+
+        $this->decryptors[$userId] = $decryptor;
+    }
+
+    public function getDecryptor(int|string $userId): ?DecryptorHandle
+    {
+        return $this->decryptors[(string) $userId] ?? null;
+    }
+
+    public function clearDecryptors(): void
+    {
+        foreach ($this->decryptors as $decryptor) {
+            $decryptor->destroy();
+        }
+
+        $this->decryptors = [];
+    }
+
+    public function resetProtocolState(): void
+    {
+        $this->replaceSession(null);
+        $this->replaceEncryptor(null);
+        $this->clearDecryptors();
+
+        $this->protocolVersion = 0;
+        $this->epoch = null;
+        $this->pendingTransitionId = null;
+        $this->pendingProtocolVersion = null;
+        $this->latestPreparedTransitionVersion = null;
+        $this->passthroughMode = true;
+    }
+
+    public function close(): void
+    {
+        $this->replaceSession(null);
+        $this->replaceEncryptor(null);
+        $this->clearDecryptors();
+    }
+
     /**
      * @param array<int|string> $userIds
      */
@@ -75,7 +184,10 @@ final class State
 
     public function removeRecognizedUser(int|string $userId): void
     {
-        unset($this->recognizedUserIds[(string) $userId]);
+        $userId = (string) $userId;
+
+        unset($this->recognizedUserIds[$userId]);
+        $this->setDecryptor($userId, null);
     }
 
     /**
@@ -84,5 +196,19 @@ final class State
     public function recognizedUsers(): array
     {
         return array_keys($this->recognizedUserIds);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function recognizedUsersIncludingSelf(): array
+    {
+        $recognizedUsers = $this->recognizedUsers();
+
+        if ($this->selfUserId !== null && ! isset($this->recognizedUserIds[$this->selfUserId])) {
+            $recognizedUsers[] = $this->selfUserId;
+        }
+
+        return $recognizedUsers;
     }
 }

@@ -86,8 +86,8 @@ final class Packet
      * @param int                                 $timestamp              The packet timestamp.
      * @param bool                                $encryption             Whether the packet should be encrypted.
      * @param string|null                         $key                    The encryption key.
-     * @param null|callable(string): string       $outboundFrameEncryptor Optional callback to transform outgoing decrypted frame data.
-     * @param null|callable(string): false|string $inboundFrameDecryptor  Optional callback to transform incoming decrypted frame data.
+    * @param null|callable(string): string             $outboundFrameEncryptor Optional callback to transform outgoing decrypted frame data.
+    * @param null|callable(string, self): false|string $inboundFrameDecryptor  Optional callback to transform incoming decrypted frame data.
      */
     public function __construct(
         ?string $data = null,
@@ -212,7 +212,7 @@ final class Packet
             );
 
             if ($resultMessage !== false && is_callable($this->inboundFrameDecryptor)) {
-                $resultMessage = ($this->inboundFrameDecryptor)($resultMessage);
+                $resultMessage = ($this->inboundFrameDecryptor)($resultMessage, $this);
             }
 
             // If decryption fails, log the error and return

@@ -29,7 +29,7 @@ final class WSDaveMlsProposalsTest extends TestCase
 {
     protected function tearDown(): void
     {
-        Runtime::configureCallbacks();
+        Runtime::reset();
     }
 
     public function testMlsProposalsSendCommitWelcomeWhenRuntimeBuildsPayload(): void
@@ -37,7 +37,7 @@ final class WSDaveMlsProposalsTest extends TestCase
         Runtime::configureCallbacks(
             null,
             null,
-            fn (string $payload): ?string => "commit:{$payload}"
+            fn (string $payload, int $protocolVersion): ?string => "commit:{$protocolVersion}:{$payload}"
         );
 
         $sentPayload = null;
@@ -49,15 +49,17 @@ final class WSDaveMlsProposalsTest extends TestCase
         $this->invokeProtectedMethod($ws, 'handleDaveMlsProposals', [$frame]);
 
         self::assertIsString($sentPayload);
-        $out = BinaryFrame::fromPayload($sentPayload);
+        /** @var string $sentPayload */
+        $out = BinaryFrame::fromClientPayload($sentPayload);
         self::assertNotNull($out);
+        self::assertNull($out->sequence);
         self::assertSame(Op::VOICE_DAVE_MLS_COMMIT_WELCOME, $out->opcode);
-        self::assertSame('commit:proposals', $out->payload);
+        self::assertSame('commit:1:proposals', $out->payload);
     }
 
     public function testMlsProposalsSendInvalidCommitWelcomeWhenRuntimeCannotBuildPayload(): void
     {
-        Runtime::configureCallbacks(null, null, fn (): ?string => null);
+        Runtime::configureCallbacks(null, null, fn (string $payload, int $protocolVersion): ?string => null);
 
         $sentPayload = null;
         $ws = $this->makeWsForProposalsTest(function (string $payload) use (&$sentPayload): void {
@@ -68,8 +70,10 @@ final class WSDaveMlsProposalsTest extends TestCase
         $this->invokeProtectedMethod($ws, 'handleDaveMlsProposals', [$frame]);
 
         self::assertIsString($sentPayload);
-        $out = BinaryFrame::fromPayload($sentPayload);
+        /** @var string $sentPayload */
+        $out = BinaryFrame::fromClientPayload($sentPayload);
         self::assertNotNull($out);
+        self::assertNull($out->sequence);
         self::assertSame(Op::VOICE_DAVE_MLS_INVALID_COMMIT_WELCOME, $out->opcode);
         self::assertSame('', $out->payload);
     }

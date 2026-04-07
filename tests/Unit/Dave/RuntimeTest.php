@@ -20,9 +20,25 @@ use PHPUnit\Framework\TestCase;
 
 final class RuntimeTest extends TestCase
 {
+    private ?string $originalDaveLibraryPath = null;
+
+    protected function setUp(): void
+    {
+        $this->originalDaveLibraryPath = getenv('DISCORDPHP_DAVE_LIBRARY') ?: null;
+        Runtime::reset();
+    }
+
     protected function tearDown(): void
     {
-        Runtime::configureCallbacks();
+        Runtime::reset();
+
+        if ($this->originalDaveLibraryPath === null) {
+            putenv('DISCORDPHP_DAVE_LIBRARY');
+
+            return;
+        }
+
+        putenv('DISCORDPHP_DAVE_LIBRARY='.$this->originalDaveLibraryPath);
     }
 
     public function testEncryptDecryptAndCommitWelcomeCallbacksAreUsed(): void
@@ -43,5 +59,73 @@ final class RuntimeTest extends TestCase
         self::assertSame('frame', Runtime::encryptMediaFrame('frame', 0));
         self::assertSame('frame', Runtime::decryptMediaFrame('frame', 0));
         self::assertNull(Runtime::buildMlsCommitWelcome('proposals', 0));
+    }
+
+    public function testNativeRuntimeLoadsAndReportsMaxProtocolVersion(): void
+    {
+        $this->requireNativeDaveRuntime();
+
+        self::assertTrue(Runtime::isAvailable());
+        self::assertSame(1, Runtime::maxProtocolVersion());
+    }
+
+    public function testNativeSessionLifecycleAndKeyPackageGeneration(): void
+    {
+        $this->requireNativeDaveRuntime();
+
+        $session = Runtime::createSession();
+        self::assertNotNull($session);
+
+        try {
+            self::assertTrue(Runtime::initializeSession($session, 1, 123, '111'));
+            self::assertSame(1, Runtime::getSessionProtocolVersion($session));
+
+            $keyPackage = Runtime::getMarshalledKeyPackage($session);
+            self::assertIsString($keyPackage);
+            self::assertNotSame('', $keyPackage);
+
+            self::assertTrue(Runtime::resetSession($session));
+        } finally {
+            $session->destroy();
+        }
+    }
+
+    public function testNativeEncryptorAndDecryptorPassthroughRoundTrip(): void
+    {
+        $this->requireNativeDaveRuntime();
+
+        $encryptor = Runtime::createEncryptor();
+        $decryptor = Runtime::createDecryptor();
+
+        self::assertNotNull($encryptor);
+        self::assertNotNull($decryptor);
+
+        try {
+            self::assertTrue(Runtime::configureEncryptorPassthrough($encryptor, true));
+            self::assertTrue(Runtime::configureDecryptorPassthrough($decryptor, true));
+
+            $frame = hex2bin('0dc5aedd5bdc3f20be5697e54dd1f437');
+            self::assertIsString($frame);
+
+            $encrypted = Runtime::encryptWithEncryptor($encryptor, $frame, 0);
+            self::assertSame($frame, $encrypted);
+
+            $decrypted = Runtime::decryptWithDecryptor($decryptor, $encrypted);
+            self::assertSame($frame, $decrypted);
+        } finally {
+            $encryptor->destroy();
+            $decryptor->destroy();
+        }
+    }
+
+    private function requireNativeDaveRuntime(): void
+    {
+        $libraryPath = $this->originalDaveLibraryPath;
+        if ($libraryPath === null || $libraryPath === '' || ! is_file($libraryPath)) {
+            self::markTestSkipped('Native libdave runtime not configured for this test run.');
+        }
+
+        putenv('DISCORDPHP_DAVE_LIBRARY='.$libraryPath);
+        Runtime::reset();
     }
 }

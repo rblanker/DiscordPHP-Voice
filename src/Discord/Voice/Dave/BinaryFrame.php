@@ -17,11 +17,13 @@ namespace Discord\Voice\Dave;
 
 final class BinaryFrame
 {
-    private const MIN_HEADER_SIZE = 3;
-    private const HEADER_UNPACK_FORMAT = 'nsequence/Copcode';
+    private const CLIENT_MIN_HEADER_SIZE = 1;
+    private const SERVER_MIN_HEADER_SIZE = 3;
+    private const SERVER_HEADER_UNPACK_FORMAT = 'nsequence/Copcode';
+    private const CLIENT_HEADER_UNPACK_FORMAT = 'Copcode';
 
     public function __construct(
-        public readonly int $sequence,
+        public readonly ?int $sequence,
         public readonly int $opcode,
         public readonly string $payload = ''
     ) {
@@ -29,11 +31,11 @@ final class BinaryFrame
 
     public static function fromPayload(string $payload): ?self
     {
-        if (strlen($payload) < self::MIN_HEADER_SIZE) {
+        if (strlen($payload) < self::SERVER_MIN_HEADER_SIZE) {
             return null;
         }
 
-        $header = unpack(self::HEADER_UNPACK_FORMAT, substr($payload, 0, self::MIN_HEADER_SIZE));
+        $header = unpack(self::SERVER_HEADER_UNPACK_FORMAT, substr($payload, 0, self::SERVER_MIN_HEADER_SIZE));
         if (! $header) {
             return null;
         }
@@ -41,12 +43,39 @@ final class BinaryFrame
         return new self(
             $header['sequence'],
             $header['opcode'],
-            substr($payload, self::MIN_HEADER_SIZE)
+            substr($payload, self::SERVER_MIN_HEADER_SIZE)
+        );
+    }
+
+    public static function fromClientPayload(string $payload): ?self
+    {
+        if (strlen($payload) < self::CLIENT_MIN_HEADER_SIZE) {
+            return null;
+        }
+
+        $header = unpack(self::CLIENT_HEADER_UNPACK_FORMAT, substr($payload, 0, self::CLIENT_MIN_HEADER_SIZE));
+        if (! $header) {
+            return null;
+        }
+
+        return new self(
+            null,
+            $header['opcode'],
+            substr($payload, self::CLIENT_MIN_HEADER_SIZE)
         );
     }
 
     public function toPayload(): string
     {
+        if ($this->sequence === null) {
+            throw new \RuntimeException('Server DAVE binary frames require a sequence number.');
+        }
+
         return pack('nC', $this->sequence, $this->opcode).$this->payload;
+    }
+
+    public function toClientPayload(): string
+    {
+        return pack('C', $this->opcode).$this->payload;
     }
 }

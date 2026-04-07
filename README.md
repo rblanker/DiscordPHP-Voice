@@ -19,9 +19,22 @@ Before you start using this Library, you **need** to know how PHP works, you nee
 
 - DAVE protocol negotiation is now supported at the voice gateway layer.
 - Binary DAVE voice opcodes are parsed and routed.
-- If [`ext-ffi`](https://www.php.net/manual/en/book.ffi.php) is enabled and `libdave.so` is available, the runtime will detect the maximum protocol version from libdave.
-- You can override the library lookup path with `DISCORDPHP_DAVE_LIBRARY` (defaults to `libdave.so`).
+- If [`ext-ffi`](https://www.php.net/manual/en/book.ffi.php) is enabled and `libdave.so` is available, the runtime will load real libdave session and media APIs and detect the maximum supported DAVE protocol version.
+- Use `./scripts/setup-libdave.sh` on Linux x64 to fetch the published `discord/libdave` release asset into `.cache/libdave` without vendoring the binary into git.
+- Export `DISCORDPHP_DAVE_LIBRARY=$PWD/.cache/libdave/lib/libdave.so` to force the runtime to use the repo-local shared library path.
+- CI uses the same setup script and enables `ext-ffi` so native DAVE coverage stays runnable.
 - If libdave is unavailable, the client automatically falls back to protocol version `0` (transport-only behavior).
+
+#### Local Linux x64 setup
+
+```bash
+COMPOSER_ROOT_VERSION=dev-main composer install --no-interaction --prefer-dist
+./scripts/setup-libdave.sh
+export DISCORDPHP_DAVE_LIBRARY="$PWD/.cache/libdave/lib/libdave.so"
+./vendor/bin/phpunit --filter Dave
+```
+
+The setup script currently targets the published Linux x64 BoringSSL release asset `libdave-Linux-X64-boringssl.zip` from `discord/libdave`.
 
 ### Basic Example
 

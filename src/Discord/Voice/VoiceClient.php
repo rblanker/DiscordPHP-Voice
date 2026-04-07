@@ -1170,13 +1170,29 @@ class VoiceClient extends EventEmitter
             return $frame;
         }
 
-        $protocolVersion = $this->udp->ws->getDaveProtocolVersion();
+        $daveState = $this->udp->ws->getDaveState();
+        $protocolVersion = $daveState->protocolVersion;
         if ($protocolVersion <= 0) {
             return $frame;
         }
 
-        $encrypted = DaveRuntime::encryptMediaFrame($frame, $protocolVersion);
+        $encrypted = null;
+
+        if ($daveState->encryptor !== null && $this->ssrc !== null) {
+            $encrypted = DaveRuntime::encryptWithEncryptor($daveState->encryptor, $frame, $this->ssrc);
+        }
+
         if (! is_string($encrypted)) {
+            $encrypted = DaveRuntime::encryptMediaFrame($frame, $protocolVersion);
+        }
+
+        if (! is_string($encrypted)) {
+            $this->discord->getLogger()->warning('Failed to encrypt outgoing DAVE frame.', [
+                'protocol_version' => $protocolVersion,
+                'frame_length' => strlen($frame),
+                'ssrc' => $this->ssrc,
+            ]);
+
             return $frame;
         }
 
@@ -1191,18 +1207,31 @@ class VoiceClient extends EventEmitter
     /**
      * Decrypts an incoming Opus frame using DAVE when enabled.
      */
-    public function decryptDaveFrame(string $frame): string|false
+    public function decryptDaveFrame(string $frame, ?Packet $packet = null): string|false
     {
         if (! isset($this->udp?->ws)) {
             return $frame;
         }
 
-        $protocolVersion = $this->udp->ws->getDaveProtocolVersion();
+        $daveState = $this->udp->ws->getDaveState();
+        $protocolVersion = $daveState->protocolVersion;
         if ($protocolVersion <= 0) {
             return $frame;
         }
 
-        $decrypted = DaveRuntime::decryptMediaFrame($frame, $protocolVersion);
+        $decrypted = null;
+
+        if ($packet !== null) {
+            $remoteUserId = $this->resolveDaveRemoteUserId($packet);
+            if ($remoteUserId !== null && ($decryptor = $daveState->getDecryptor($remoteUserId)) !== null) {
+                $decrypted = DaveRuntime::decryptWithDecryptor($decryptor, $frame);
+            }
+        }
+
+        if (! is_string($decrypted) && $decrypted !== false) {
+            $decrypted = DaveRuntime::decryptMediaFrame($frame, $protocolVersion);
+        }
+
         if ($decrypted === false) {
             return false;
         }
@@ -1211,6 +1240,7 @@ class VoiceClient extends EventEmitter
             $this->discord->getLogger()->warning('Failed to decrypt incoming DAVE frame.', [
                 'protocol_version' => $protocolVersion,
                 'frame_length' => strlen($frame),
+                'ssrc' => $packet?->getSSRC(),
             ]);
 
             return false;
@@ -1222,6 +1252,16 @@ class VoiceClient extends EventEmitter
         ]);
 
         return $decrypted;
+    }
+
+    private function resolveDaveRemoteUserId(Packet $packet): ?string
+    {
+        $speaking = $this->speakingStatus->get('ssrc', $packet->getSSRC());
+        if ($speaking === null || ! isset($speaking->user_id)) {
+            return null;
+        }
+
+        return (string) $speaking->user_id;
     }
 
     /**

@@ -28,7 +28,7 @@ final class VoiceClientDaveFrameTest extends TestCase
 {
     protected function tearDown(): void
     {
-        Runtime::configureCallbacks();
+        Runtime::reset();
     }
 
     public function testEncryptAndDecryptPassThroughWhenDaveProtocolDisabled(): void
