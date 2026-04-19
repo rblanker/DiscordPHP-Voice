@@ -80,6 +80,10 @@ final class WS
         Op::VOICE_DAVE_MLS_PROPOSALS => 'handleDaveMlsProposals',
         Op::VOICE_DAVE_MLS_ANNOUNCE_COMMIT_TRANSITION => 'handleDaveMlsAnnounceCommitTransition',
         Op::VOICE_DAVE_MLS_WELCOME => 'handleDaveMlsWelcome',
+        Op::VOICE_DAVE_TRANSITION_READY => 'handleDaveTransitionReady',
+        Op::VOICE_DAVE_MLS_KEY_PACKAGE => 'handleDaveMlsKeyPackage',
+        Op::VOICE_DAVE_MLS_COMMIT_WELCOME => 'handleDaveMlsCommitWelcome',
+        Op::VOICE_DAVE_MLS_INVALID_COMMIT_WELCOME => 'handleDaveMlsInvalidCommitWelcome',
 
         Op::CLOSE_VOICE_DISCONNECTED => 'handleCloseVoiceDisconnected',
     ];
@@ -546,7 +550,12 @@ final class WS
     protected function handleDaveTransitionReady($data): void
     {
         $this->discord->logger->debug('DAVE Transition Ready', ['data' => $data]);
-        // Handle transition ready state
+        $transitionId = (int) ($data->d['transition_id'] ?? 0);
+
+        $this->applySelfDaveEncryptor(
+            $this->daveState->pendingProtocolVersion ?? $this->daveState->protocolVersion
+        );
+        $this->daveState->executeTransition($transitionId);
     }
 
     protected function handleDavePrepareEpoch($data): void
@@ -590,7 +599,13 @@ final class WS
 
     protected function handleDaveMlsKeyPackage($data): void
     {
-        $this->discord->logger->debug('DAVE MLS Key Package', ['data' => $data]);
+        $this->discord->logger->debug('DAVE MLS Key Package received', ['data' => $data]);
+
+        if (! ($data instanceof BinaryFrame)) {
+            return;
+        }
+
+        // Server handles proposal aggregation; we passively receive forwarded key packages.
     }
 
     protected function handleDaveMlsProposals($data): void
@@ -626,7 +641,41 @@ final class WS
     protected function handleDaveMlsCommitWelcome($data): void
     {
         $this->discord->logger->debug('DAVE MLS Commit Welcome', ['data' => $data]);
-        // Handle MLS commit and welcome messages
+
+        if (! ($data instanceof BinaryFrame) || $this->daveState->session === null) {
+            return;
+        }
+
+        [$transitionId, $commitWelcome] = $this->splitTransitionPayload($data->payload);
+
+        $result = DaveRuntime::processCommit($this->daveState->session, $commitWelcome);
+        if ($result !== null && ! ($result['failed'] ?? true) && ! ($result['ignored'] ?? false)) {
+            $this->prepareDaveMediaTransition(
+                $transitionId,
+                $this->daveState->pendingProtocolVersion ?? $this->daveState->protocolVersion
+            );
+            $this->sendDaveTransitionReady($transitionId);
+
+            return;
+        }
+
+        $joinedGroup = DaveRuntime::processWelcome(
+            $this->daveState->session,
+            $commitWelcome,
+            $this->daveState->recognizedUsersIncludingSelf()
+        );
+
+        if ($joinedGroup) {
+            $this->prepareDaveMediaTransition(
+                $transitionId,
+                $this->daveState->pendingProtocolVersion ?? $this->daveState->protocolVersion
+            );
+            $this->sendDaveTransitionReady($transitionId);
+
+            return;
+        }
+
+        $this->handleInvalidDaveTransition($transitionId);
     }
 
     protected function handleDaveMlsAnnounceCommitTransition($data)
@@ -687,7 +736,8 @@ final class WS
 
     protected function handleDaveMlsInvalidCommitWelcome($data)
     {
-        $this->discord->logger->debug('DAVE MLS Invalid Commit Welcome', ['data' => $data]);
+        $this->discord->logger->warning('DAVE MLS Invalid Commit Welcome received; recovering MLS state.', ['data' => $data]);
+        $this->handleInvalidDaveTransition(0, true);
     }
 
     /**
