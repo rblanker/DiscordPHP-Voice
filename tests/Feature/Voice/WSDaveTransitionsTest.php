@@ -52,8 +52,10 @@ it('handleDavePrepareTransition sends TRANSITION_READY with matching transition_
 it('handleDavePrepareTransition sets pendingProtocolVersion from the resolved data field', function (): void {
     $ws = makeWsForTransitionsTest($this, function (string $payload): void {});
 
-    // Without libdave, resolveDaveProtocolVersion(1) → 0; we verify the field is
-    // consumed and passed through to prepareTransition (resulting in 0 here).
+    // Force isAvailable() to return false so resolveDaveProtocolVersion(1) → 0;
+    // we verify the field is consumed and passed through to prepareTransition (resulting in 0 here).
+    Runtime::configureCallbacks(availabilityOverride: false);
+
     $data = (object) ['d' => ['transition_id' => 7, 'protocol_version' => 1]];
     invokeTransitionsWsMethod($ws, 'handleDavePrepareTransition', [$data]);
 
@@ -178,21 +180,14 @@ it('resolveDaveProtocolVersion returns 0 when protocolVersion is 0 or negative',
 });
 
 it('resolveDaveProtocolVersion returns 0 when libdave runtime is unavailable', function (): void {
-    $original = getenv('DISCORDPHP_DAVE_LIBRARY') ?: null;
-    putenv('DISCORDPHP_DAVE_LIBRARY');
-    Runtime::reset();
+    // Use availabilityOverride to simulate libdave being absent without relying on putenv/reset,
+    // since dlopen caches the loaded library in the process regardless of env var changes.
+    Runtime::configureCallbacks(availabilityOverride: false);
 
-    try {
-        $ws = makeWsForTransitionsTest($this, function (string $payload): void {});
+    $ws = makeWsForTransitionsTest($this, function (string $payload): void {});
 
-        $result = invokeTransitionsWsMethod($ws, 'resolveDaveProtocolVersion', [1]);
-        expect($result)->toBe(0);
-    } finally {
-        if ($original !== null) {
-            putenv('DISCORDPHP_DAVE_LIBRARY=' . $original);
-        }
-        Runtime::reset();
-    }
+    $result = invokeTransitionsWsMethod($ws, 'resolveDaveProtocolVersion', [1]);
+    expect($result)->toBe(0);
 });
 
 it('resolveDaveProtocolVersion returns min(requested, maxProtocol) when libdave is available', function (): void {

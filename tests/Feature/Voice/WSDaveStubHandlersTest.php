@@ -82,6 +82,8 @@ it('handleDaveMlsCommitWelcome sends invalid commit welcome when both commit and
     $fakeSession = new SessionHandle(new \stdClass());
     $state->replaceSession($fakeSession);
 
+    Runtime::configureCallbacks(processCommitCallback: fn (?SessionHandle $s, string $c): ?array => null, processWelcomeCallback: fn (?SessionHandle $s, string $w, array $u): bool => false);
+
     $transitionPayload = pack('n', 3).'commit-welcome-bytes';
     $frame = new BinaryFrame(1, Op::VOICE_DAVE_MLS_COMMIT_WELCOME, $transitionPayload);
     invokeWsMethod($ws, 'handleDaveMlsCommitWelcome', [$frame]);

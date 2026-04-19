@@ -86,17 +86,22 @@ it('initializeDaveRuntimeState resets existing session when resetState is true',
     expect($state->session)->not->toBeNull();
 
     // With resetState=true, resetProtocolState() nulls the session before createSession is called.
-    // createSession returns null without libdave, so session remains null.
+    // Without libdave, createSession returns null so session remains null.
+    // With libdave, createSession creates a new session — either way the old session is gone.
     invokeSessionInitMethod($ws, 'initializeDaveRuntimeState', [1, true]);
 
-    expect($state->session)->toBeNull();
+    expect($state->session)->not->toBe($existingSession);
 });
 
-it('initializeDaveRuntimeState returns false when createSession fails without libdave', function (): void {
+it('initializeDaveRuntimeState returns false when createSession fails', function (): void {
     $sentPayloads = [];
     $ws = makeWsForSessionInitTest($this, $sentPayloads);
 
-    // Identity is set (default in makeWsForSessionInitTest), session is null → createSession will fail.
+    // Inject a null-returning createSession callback to simulate session creation failure
+    // regardless of libdave availability.
+    Runtime::configureCallbacks(createSessionCallback: fn () => null);
+
+    // Identity is set (default in makeWsForSessionInitTest), session is null → createSession returns null → false.
     $result = invokeSessionInitMethod($ws, 'initializeDaveRuntimeState', [1]);
 
     expect($result)->toBeFalse()
@@ -152,6 +157,10 @@ it('handleDavePrepareEpoch records epoch and returns early when dave_protocol_ve
 it('handleDavePrepareEpoch resolves protocol version to 0 without libdave and sends no key package', function (): void {
     $sentPayloads = [];
     $ws = makeWsForSessionInitTest($this, $sentPayloads);
+
+    // Force isAvailable() to return false so resolveDaveProtocolVersion downgrades to 0,
+    // making the handler return early without creating a session or sending a key package.
+    Runtime::configureCallbacks(availabilityOverride: false);
 
     // dave_protocol_version=1 but libdave unavailable → resolveDaveProtocolVersion returns 0 → early return.
     $data = new \stdClass();

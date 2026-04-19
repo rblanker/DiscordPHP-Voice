@@ -195,7 +195,7 @@ final class State
      */
     public function recognizedUsers(): array
     {
-        return array_keys($this->recognizedUserIds);
+        return array_map('strval', array_keys($this->recognizedUserIds));
     }
 
     /**

@@ -83,6 +83,8 @@ it('mls welcome does not send TRANSITION_READY when processWelcome fails', funct
     $ws = makeWsForWelcomeTest($this, $sentPayloads, protocolVersion: 0);
     injectWelcomeFakeSession($ws);
 
+    Runtime::configureCallbacks(processWelcomeCallback: fn (?SessionHandle $s, string $w, array $u): bool => false);
+
     $frame = new BinaryFrame(1, Op::VOICE_DAVE_MLS_WELCOME, pack('n', 7).'welcome-bytes');
     invokeWelcomeMethod($ws, 'handleDaveMlsWelcome', [$frame]);
 

@@ -86,12 +86,12 @@ it('tracks recognized users and only appends self when needed', function (): voi
     $state->setIdentity(42, 100);
 
     $state->addRecognizedUsers([7, '7', '9']);
-    expect($state->recognizedUsers())->toBe([7, 9])
-        ->and($state->recognizedUsersIncludingSelf())->toBe([7, 9, '42']);
+    expect($state->recognizedUsers())->toBe(['7', '9'])
+        ->and($state->recognizedUsersIncludingSelf())->toBe(['7', '9', '42']);
 
     $state->addRecognizedUsers([42, '9']);
-    expect($state->recognizedUsers())->toBe([7, 9, 42])
-        ->and($state->recognizedUsersIncludingSelf())->toBe([7, 9, 42]);
+    expect($state->recognizedUsers())->toBe(['7', '9', '42'])
+        ->and($state->recognizedUsersIncludingSelf())->toBe(['7', '9', '42']);
 });
 
 it('replaces and clears handles while destroying old instances', function (): void {
@@ -176,8 +176,8 @@ it('resets protocol state without losing identity or recognized users', function
         ->and($state->passthroughMode)->toBeTrue()
         ->and($state->selfUserId)->toBe('42')
         ->and($state->groupId)->toBe(123)
-        ->and($state->recognizedUsers())->toBe([7])
-        ->and($state->recognizedUsersIncludingSelf())->toBe([7, '42'])
+        ->and($state->recognizedUsers())->toBe(['7'])
+        ->and($state->recognizedUsersIncludingSelf())->toBe(['7', '42'])
         ->and($state->externalSenderPackage)->toBe('sender')
         ->and($state->lastReceivedSequence)->toBe(55);
 
@@ -195,7 +195,7 @@ it('removes users and closes tracked handles without resetting metadata', functi
     $state->setDecryptor('8', $removedDecryptor);
     $state->removeRecognizedUser('8');
 
-    expect($state->recognizedUsers())->toBe([7])
+    expect($state->recognizedUsers())->toBe(['7'])
         ->and($state->getDecryptor('8'))->toBeNull();
     expectHandleDestroyed($removedDecryptor);
 
@@ -212,7 +212,7 @@ it('removes users and closes tracked handles without resetting metadata', functi
         ->and($state->encryptor)->toBeNull()
         ->and($state->getDecryptor('7'))->toBeNull()
         ->and($state->protocolVersion)->toBe(2)
-        ->and($state->recognizedUsers())->toBe([7]);
+        ->and($state->recognizedUsers())->toBe(['7']);
 
     expectHandleDestroyed($session);
     expectHandleDestroyed($encryptor);

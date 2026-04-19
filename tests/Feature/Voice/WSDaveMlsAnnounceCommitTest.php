@@ -121,6 +121,8 @@ it('sends INVALID_COMMIT_WELCOME when processCommit returns null (protocolVersio
         $sentPayloads[] = $payload;
     }, protocolVersion: 1, session: $fakeSession);
 
+    Runtime::configureCallbacks(processCommitCallback: fn (?SessionHandle $s, string $c): ?array => null);
+
     $payload = pack('n', 5) . 'commit-payload';
     $frame = new BinaryFrame(1, Op::VOICE_DAVE_MLS_ANNOUNCE_COMMIT_TRANSITION, $payload);
     invokeAnnounceCommitMethod($ws, 'handleDaveMlsAnnounceCommitTransition', [$frame]);

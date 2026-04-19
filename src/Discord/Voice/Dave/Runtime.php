@@ -148,8 +148,29 @@ CDEF;
      */
     private static $mlsCommitWelcomeBuilder = null;
 
+    /**
+     * @var null|callable(?SessionHandle, string): ?array
+     */
+    private static $processCommitCallback = null;
+
+    /**
+     * @var null|callable(?SessionHandle, string, array): bool
+     */
+    private static $processWelcomeCallback = null;
+
+    /**
+     * @var null|callable(?string): ?SessionHandle
+     */
+    private static $createSessionCallback = null;
+
+    private static ?bool $availabilityOverride = null;
+
     public static function isAvailable(): bool
     {
+        if (self::$availabilityOverride !== null) {
+            return self::$availabilityOverride;
+        }
+
         self::load();
 
         return self::$ffi instanceof FFI;
@@ -185,21 +206,36 @@ CDEF;
         self::$frameEncryptor = null;
         self::$frameDecryptor = null;
         self::$mlsCommitWelcomeBuilder = null;
+        self::$processCommitCallback = null;
+        self::$processWelcomeCallback = null;
+        self::$createSessionCallback = null;
+        self::$availabilityOverride = null;
     }
 
     /**
      * @param null|callable(string, int): ?string           $frameEncryptor
      * @param null|callable(string, int): false|string|null $frameDecryptor
      * @param null|callable(string, int): ?string           $mlsCommitWelcomeBuilder
+     * @param null|callable(?SessionHandle, string): ?array $processCommitCallback
+     * @param null|callable(?SessionHandle, string, array): bool $processWelcomeCallback
+     * @param null|callable(?string): ?SessionHandle $createSessionCallback
      */
     public static function configureCallbacks(
         ?callable $frameEncryptor = null,
         ?callable $frameDecryptor = null,
-        ?callable $mlsCommitWelcomeBuilder = null
+        ?callable $mlsCommitWelcomeBuilder = null,
+        ?callable $processCommitCallback = null,
+        ?callable $processWelcomeCallback = null,
+        ?callable $createSessionCallback = null,
+        ?bool $availabilityOverride = null
     ): void {
         self::$frameEncryptor = $frameEncryptor;
         self::$frameDecryptor = $frameDecryptor;
         self::$mlsCommitWelcomeBuilder = $mlsCommitWelcomeBuilder;
+        self::$processCommitCallback = $processCommitCallback;
+        self::$processWelcomeCallback = $processWelcomeCallback;
+        self::$createSessionCallback = $createSessionCallback;
+        self::$availabilityOverride = $availabilityOverride;
     }
 
     public static function encryptMediaFrame(string $frame, int $protocolVersion): ?string
@@ -255,6 +291,10 @@ CDEF;
 
     public static function createSession(?string $authSessionId = null): ?SessionHandle
     {
+        if (is_callable(self::$createSessionCallback)) {
+            return (self::$createSessionCallback)($authSessionId);
+        }
+
         $ffi = self::ffi();
         if (! $ffi instanceof FFI) {
             return null;
@@ -398,6 +438,10 @@ CDEF;
 
     public static function processCommit(SessionHandle $session, string $commit): ?array
     {
+        if (is_callable(self::$processCommitCallback)) {
+            return (self::$processCommitCallback)($session, $commit);
+        }
+
         $ffi = self::ffi();
         if (! $ffi instanceof FFI) {
             return null;
@@ -431,6 +475,10 @@ CDEF;
      */
     public static function processWelcome(SessionHandle $session, string $welcome, array $recognizedUserIds): bool
     {
+        if (is_callable(self::$processWelcomeCallback)) {
+            return (self::$processWelcomeCallback)($session, $welcome, $recognizedUserIds);
+        }
+
         $ffi = self::ffi();
         if (! $ffi instanceof FFI) {
             return false;
