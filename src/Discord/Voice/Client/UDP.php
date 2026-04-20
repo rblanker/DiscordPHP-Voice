@@ -44,7 +44,7 @@ final class UDP extends Socket
     /**
      * The Opus Silence Frame.
      */
-    public const string SILENCE_FRAME = "\0xF8\0xFF\0xFE";
+    public const string SILENCE_FRAME = "\xF8\xFF\xFE";
 
     /**
      * The stream time of the last packet.
@@ -201,8 +201,20 @@ final class UDP extends Socket
             $unpackedMessageArray = \unpack('C2Type/nLength/NSSRC/A64Address/nPort', $message);
 
             $this->ws->vc->ssrc = $unpackedMessageArray['SSRC'];
-            $ip = $unpackedMessageArray['Address'];
+            $ip = rtrim($unpackedMessageArray['Address'], "\0");
             $port = $unpackedMessageArray['Port'];
+
+            if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
+                $this->getLogger()->warning('IP discovery returned an invalid IP address', ['ip' => $ip]);
+
+                return;
+            }
+
+            if ($port < 1 || $port > 65535) {
+                $this->getLogger()->warning('IP discovery returned an out-of-range port', ['port' => $port]);
+
+                return;
+            }
 
             $this->getLogger()->debug('received our IP and port', ['ip' => $ip, 'port' => $port]);
 
@@ -260,6 +272,8 @@ final class UDP extends Socket
             false,
             $this->ws->secretKey,
             [$this->ws->vc, 'encryptDaveFrame'],
+            null,
+            $this->ws->vc->nonce,
         );
         $this->send($packet->getEncryptedMessage());
 

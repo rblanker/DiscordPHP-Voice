@@ -128,6 +128,15 @@ class VoiceClient extends EventEmitter
     public ?int $seq = 0;
 
     /**
+     * Independent 32-bit nonce counter used for AES-256-GCM encryption.
+     * Increments separately from the 16-bit $seq so nonces never repeat after
+     * a sequence rollover (~21 min at 50 pkt/s).
+     *
+     * @var int
+     */
+    public int $nonce = 0;
+
+    /**
      * The timestamp of the last packet.
      *
      * @var int The timestamp the last packet was constructed.
@@ -580,6 +589,12 @@ class VoiceClient extends EventEmitter
                 $this->seq = 0;
             }
 
+            // increment nonce counter independently — must NOT reset with seq
+            // uint32 overflow protection
+            if (++$this->nonce >= 2 ** 32) {
+                $this->nonce = 0;
+            }
+
             $this->udp->sendBuffer($packet);
 
             // increment timestamp
@@ -589,7 +604,7 @@ class VoiceClient extends EventEmitter
             }
 
             $nextTime = $this->startTime + (20.0 / 1000.0) * $loops;
-            $delay = $nextTime - microtime(true);
+            $delay = max(0.0, $nextTime - microtime(true));
 
             $this->readOpusTimer = $this->discord->getLoop()->addTimer($delay, fn () => $this->readOggOpus($deferred, $ogg, $loops));
         }, function () use ($deferred) {
@@ -754,14 +769,14 @@ class VoiceClient extends EventEmitter
             throw new \RuntimeException('Voice Client is not ready.');
         }
 
-        $this->ws->send(json_encode(VoicePayload::new(
+        $this->ws->send(VoicePayload::new(
             Op::VOICE_SPEAKING,
             [
                 'speaking' => $speaking,
                 'delay' => 0,
                 'ssrc' => $this->ssrc,
             ],
-        )));
+        ));
 
         $this->speaking = $speaking;
     }
@@ -1092,10 +1107,6 @@ class VoiceClient extends EventEmitter
         $this->pause();
 
         $this->close();
-        $this->ws->close();
-
-        $this->discord->getLoop()->cancelTimer($this->heartbeat);
-        $this->discord->getLoop()->cancelTimer($this->udp->heartbeat);
 
         $this->on('resumed', function () {
             $this->discord->getLogger()->debug('voice client resumed');
@@ -1196,13 +1207,20 @@ class VoiceClient extends EventEmitter
         }
 
         if (! is_string($encrypted)) {
-            $this->discord->getLogger()->warning('Failed to encrypt outgoing DAVE frame.', [
+            $this->discord->getLogger()->error('Failed to encrypt outgoing DAVE frame; dropping frame to preserve E2EE integrity.', [
                 'protocol_version' => $protocolVersion,
                 'frame_length' => strlen($frame),
                 'ssrc' => $this->ssrc,
             ]);
 
-            return $frame;
+            // Return unencrypted only when DAVE is in passthrough mode (not yet active).
+            // If DAVE is active and encryption failed, drop the frame rather than
+            // sending plaintext audio which would silently break E2EE.
+            if ($daveState->passthroughMode) {
+                return $frame;
+            }
+
+            return '';
         }
 
         $this->discord->getLogger()->debug('Encrypted outgoing DAVE frame.', [
@@ -1271,21 +1289,10 @@ class VoiceClient extends EventEmitter
     /**
      * Handles raw opus data from the UDP server.
      *
-     * @param Packet|string $voicePacket The data from the UDP server.
+     * @param Packet $voicePacket The data from the UDP server.
      */
-    public function handleAudioData(Packet|string $voicePacket): void
-    {
-        if (is_string($voicePacket)) {
-            $voicePacket = new Packet(
-                $voicePacket,
-                key: $this->udp->ws->secretKey,
-                inboundFrameDecryptor: [$this, 'decryptDaveFrame']
-            );
-
-            return;
-        }
-
-        if (! $this->shouldRecord) {
+    public function handleAudioData(Packet $voicePacket): void
+    {        if (! $this->shouldRecord) {
             // If we are not recording, we don't need to handle audio data.
             return;
         }
@@ -1405,6 +1412,10 @@ class VoiceClient extends EventEmitter
         // $pid = $process->getPid();
 
         // Check every second if the process is still running
+        if ($this->monitorProcessTimer !== null) {
+            $this->discord->getLoop()->cancelTimer($this->monitorProcessTimer);
+        }
+
         $this->monitorProcessTimer = $this->discord->getLoop()->addPeriodicTimer(1.0, function () use ($process, $ss) {
             // Check if the process is still running
             if (! $process->isRunning()) {
@@ -1503,8 +1514,6 @@ class VoiceClient extends EventEmitter
 
         $this->shouldRecord = true;
         $this->discord->getLogger()->info('Started recording audio.');
-
-        $this->udp->on('message', [$this, 'handleAudioData']);
     }
 
     public function stopRecording(): void

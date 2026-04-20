@@ -177,6 +177,22 @@ it('does not re-strip RTP extension from DAVE-decrypted audio', function (): voi
     expect($packet->getAudioData())->toBe($daveOutput);
 });
 
+it('nonce counter is independent of seq preventing ciphertext reuse after rollover', function (): void {
+    $key = random_bytes(SODIUM_CRYPTO_AEAD_AES256GCM_KEYBYTES);
+
+    // Both packets share the same seq (simulating a post-rollover packet that
+    // has seq=1 again) but carry different nonce counter values.
+    $packet1 = new Packet('audio', 1, 1, 960, false, $key, null, null, 0);
+    $packet2 = new Packet('audio', 1, 1, 960, false, $key, null, null, 65536);
+
+    expect($packet1->getEncryptedMessage())->not->toBe($packet2->getEncryptedMessage());
+
+    // Both must still round-trip correctly.
+    expect((new Packet($packet1->getEncryptedMessage(), null, null, null, true, $key))->getAudioData())->toBe('audio')
+        ->and((new Packet($packet2->getEncryptedMessage(), null, null, null, true, $key))->getAudioData())->toBe('audio');
+});
+
+
 function packetWithoutConstructor(): Packet
 {
     return (new \ReflectionClass(Packet::class))->newInstanceWithoutConstructor();

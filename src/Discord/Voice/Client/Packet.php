@@ -88,6 +88,7 @@ final class Packet
      * @param string|null                               $key                    The encryption key.
      * @param null|callable(string): string             $outboundFrameEncryptor Optional callback to transform outgoing decrypted frame data.
      * @param null|callable(string, self): false|string $inboundFrameDecryptor  Optional callback to transform incoming decrypted frame data.
+     * @param int|null                                  $nonce                  32-bit nonce counter for AES-256-GCM. When null, falls back to seq-1 (legacy behaviour).
      */
     public function __construct(
         ?string $data = null,
@@ -97,7 +98,8 @@ final class Packet
         bool $decrypt = true,
         protected ?string $key = null,
         protected mixed $outboundFrameEncryptor = null,
-        protected mixed $inboundFrameDecryptor = null
+        protected mixed $inboundFrameDecryptor = null,
+        protected ?int $nonce = null
     ) {
         if (! function_exists('sodium_crypto_secretbox')) {
             throw new LibSodiumNotFoundException('libsodium-php could not be found.');
@@ -256,7 +258,9 @@ final class Packet
         }
 
         // pad nonce to 12 bytes for AES 256 GCM
-        $nonce = pack('V', $this->seq - 1);
+        // Use the dedicated 32-bit nonce counter when provided; fall back to
+        // seq-1 only for legacy call-sites that do not pass an explicit nonce.
+        $nonce = pack('V', $this->nonce ?? ($this->seq - 1));
         $paddedNonce = str_pad($nonce, SODIUM_CRYPTO_AEAD_AES256GCM_NPUBBYTES, "\0", STR_PAD_RIGHT);
 
         // encrypt the audio
