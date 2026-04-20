@@ -458,7 +458,9 @@ final class WS
         // "d" contains an array with ['user_ids' => array<string>]
         $userIds = is_array($data->d['user_ids'] ?? null) ? $data->d['user_ids'] : [];
         $this->daveState->addRecognizedUsers($userIds);
-        $this->vc->users = array_map(fn (int|string $userId) => $this->discord->getFactory()->part(UserConnected::class, ['user_id' => $userId]), $userIds);
+        foreach ($userIds as $userId) {
+            $this->vc->users[$userId] = $this->discord->getFactory()->part(UserConnected::class, ['user_id' => $userId]);
+        }
     }
 
     /**
@@ -565,6 +567,10 @@ final class WS
     {
         $this->discord->logger->debug('DAVE Transition Ready', ['data' => $data]);
         $transitionId = (int) ($data->d['transition_id'] ?? 0);
+
+        if ($this->daveState->pendingTransitionId !== $transitionId) {
+            return;
+        }
 
         $this->applySelfDaveEncryptor(
             $this->daveState->pendingProtocolVersion ?? $this->daveState->protocolVersion
@@ -753,7 +759,8 @@ final class WS
     protected function handleDaveMlsInvalidCommitWelcome($data)
     {
         $this->discord->logger->warning('DAVE MLS Invalid Commit Welcome received; recovering MLS state.', ['data' => $data]);
-        $this->handleInvalidDaveTransition(0, true);
+        $transitionId = (int) ($data->d['transition_id'] ?? 0);
+        $this->handleInvalidDaveTransition($transitionId, true);
     }
 
     /**
@@ -1135,7 +1142,7 @@ final class WS
 
         $payload = VoicePayload::new(Op::VOICE_IDENTIFY, $data);
 
-        $this->discord->logger->debug('sending identify', ['packet' => $payload->__debugInfo()]);
+        $this->discord->logger->debug('sending identify', ['op' => $payload->op]);
 
         $this->send($payload);
         $this->sentLoginFrame = true;
