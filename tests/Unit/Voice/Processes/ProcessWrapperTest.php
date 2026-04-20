@@ -174,3 +174,16 @@ it('builds dca decode commands even when the frame size defaults', function (): 
 
     expect(getProcessCommand($process))->toBe('/opt/dca ');
 });
+
+it('escapes shell metacharacters in filenames passed to ffmpeg encode', function (): void {
+    setProtectedStatic(Ffmpeg::class, 'exec', '/opt/ffmpeg');
+
+    $malicious = "'; rm -rf /'";
+    $process = Ffmpeg::encode($malicious, 0, 128000);
+    $command = getProcessCommand($process);
+
+    // The raw filename must NOT appear directly as the -i argument (unescaped injection)
+    expect($command)->not->toContain("-i {$malicious} ")
+        // The filename must appear safely quoted via escapeshellarg
+        ->and($command)->toContain(escapeshellarg($malicious));
+});

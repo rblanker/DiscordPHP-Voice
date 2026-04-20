@@ -140,6 +140,23 @@ it('creates packets from raw buffers and exposes payload data', function (): voi
         ->and($made->getAudioData())->toBeNull();
 });
 
+it('returns false not null when libsodium throws during decryption', function (): void {
+    $realKey = random_bytes(SODIUM_CRYPTO_AEAD_AES256GCM_KEYBYTES);
+    $rawPacket = buildExtensionPacket($realKey, 7, 480, 42, 'opus-data', 'EXT!');
+
+    // Build a valid packet, then corrupt the key so sodium_crypto_aead_aes256gcm_decrypt throws
+    $packet = new Packet($rawPacket, null, null, null, true, $realKey);
+
+    $keyProp = new \ReflectionProperty(Packet::class, 'key');
+    $keyProp->setAccessible(true);
+    $keyProp->setValue($packet, str_repeat('x', 5)); // wrong length — sodium throws
+
+    $result = $packet->decrypt($rawPacket);
+
+    expect($result)->toBeFalse()
+        ->and($packet->getAudioData())->toBeFalse();
+});
+
 it('does not re-strip RTP extension from DAVE-decrypted audio', function (): void {
     $key = random_bytes(SODIUM_CRYPTO_AEAD_AES256GCM_KEYBYTES);
     $rawPacket = buildExtensionPacket($key, 5, 960, 12345, 'opus-audio', 'EXT!');
