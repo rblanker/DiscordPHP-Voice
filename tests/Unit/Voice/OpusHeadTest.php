@@ -50,5 +50,5 @@ it('parses optional channel mapping data', function (): void {
 
 it('rejects invalid opus head magic headers', function (): void {
     expect(fn () => new OpusHead('BadMagic'))
-        ->toThrow(UnexpectedValueException::class, 'Expected OpusHead, found BadMagic.');
+        ->toThrow(UnexpectedValueException::class, 'Expected OpusHead, found '.bin2hex('BadMagic'));
 });

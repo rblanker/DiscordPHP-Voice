@@ -42,5 +42,5 @@ it('parses empty vendors without comment tags', function (): void {
 
 it('rejects invalid opus tags magic headers', function (): void {
     expect(fn () => new OpusTags('BadMagic'))
-        ->toThrow(UnexpectedValueException::class, 'Expected OpusTags, found BadMagic.');
+        ->toThrow(UnexpectedValueException::class, 'Expected OpusTags, found '.bin2hex('BadMagic'));
 });

@@ -117,8 +117,8 @@ class OpusHead
     public function __construct(string $data)
     {
         $magic = substr($data, 0, 8);
-        if ($magic != 'OpusHead') {
-            throw new \UnexpectedValueException("Expected OpusHead, found {$magic}.");
+        if ($magic !== 'OpusHead') {
+            throw new \UnexpectedValueException('Expected OpusHead, found '.bin2hex($magic).'.');
         }
 
         $head = unpack(self::FORMAT, $data, 8);
@@ -130,10 +130,18 @@ class OpusHead
         $this->channelMapFamily = $head['channel_map_family'];
 
         if ($head['channel_map_family'] > 0) {
+            if (strlen($data) < 21) {
+                throw new \UnexpectedValueException('OpusHead data too short for stream count fields when channel_map_family > 0.');
+            }
             $stream_counts = unpack(self::STREAM_COUNT_FORMAT, $data, 19);
             $this->streamCount = $stream_counts['stream_count'];
             $this->twoChannelStreamCount = $stream_counts['two_channel_stream_count'];
-            $this->cmap = array_values(unpack('C*', $data, 21));
+
+            $expectedLen = 21 + $this->channelCount;
+            if (strlen($data) < $expectedLen) {
+                throw new \UnexpectedValueException('OpusHead data too short for channel mapping table.');
+            }
+            $this->cmap = array_values(unpack('C*', substr($data, 21, $this->channelCount)));
         }
     }
 }

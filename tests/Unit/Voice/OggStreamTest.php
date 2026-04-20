@@ -91,7 +91,7 @@ it('surfaces invalid opus tag pages when opening a stream', function (): void {
     );
 
     expect(fn () => await(OggStream::fromBuffer($buffer)))
-        ->toThrow(UnexpectedValueException::class, 'Expected OpusTags, found BadMagic.');
+        ->toThrow(UnexpectedValueException::class, 'Expected OpusTags, found '.bin2hex('BadMagic'));
 });
 
 function buildOggStreamPageFixture(array $segments, string $segmentData): string
