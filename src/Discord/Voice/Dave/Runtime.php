@@ -32,105 +32,6 @@ typedef unsigned long long uint64_t;
 typedef _Bool bool;
 CDEF;
 
-    /**
-     * Hardcoded FFI C declarations used as fallback when the dave.h header
-     * shipped with the native library is not available on disk.
-     */
-    private const DAVE_FFI_DEFINITIONS = <<<'CDEF'
-typedef struct DAVESessionHandle_s* DAVESessionHandle;
-typedef struct DAVECommitResultHandle_s* DAVECommitResultHandle;
-typedef struct DAVEWelcomeResultHandle_s* DAVEWelcomeResultHandle;
-typedef struct DAVEKeyRatchetHandle_s* DAVEKeyRatchetHandle;
-typedef struct DAVEEncryptorHandle_s* DAVEEncryptorHandle;
-typedef struct DAVEDecryptorHandle_s* DAVEDecryptorHandle;
-
-typedef void (*DAVEMLSFailureCallback)(const char* source, const char* reason, void* userData);
-
-uint16_t daveMaxSupportedProtocolVersion(void);
-void daveFree(void* ptr);
-
-DAVESessionHandle daveSessionCreate(void* context,
-                                    const char* authSessionId,
-                                    DAVEMLSFailureCallback callback,
-                                    void* userData);
-void daveSessionDestroy(DAVESessionHandle session);
-void daveSessionInit(DAVESessionHandle session,
-                     uint16_t version,
-                     uint64_t groupId,
-                     const char* selfUserId);
-void daveSessionReset(DAVESessionHandle session);
-void daveSessionSetProtocolVersion(DAVESessionHandle session, uint16_t version);
-uint16_t daveSessionGetProtocolVersion(DAVESessionHandle session);
-void daveSessionSetExternalSender(DAVESessionHandle session,
-                                  const uint8_t* externalSender,
-                                  size_t length);
-void daveSessionProcessProposals(DAVESessionHandle session,
-                                 const uint8_t* proposals,
-                                 size_t length,
-                                 const char** recognizedUserIds,
-                                 size_t recognizedUserIdsLength,
-                                 uint8_t** commitWelcomeBytes,
-                                 size_t* commitWelcomeBytesLength);
-DAVECommitResultHandle daveSessionProcessCommit(DAVESessionHandle session,
-                                                const uint8_t* commit,
-                                                size_t length);
-DAVEWelcomeResultHandle daveSessionProcessWelcome(DAVESessionHandle session,
-                                                  const uint8_t* welcome,
-                                                  size_t length,
-                                                  const char** recognizedUserIds,
-                                                  size_t recognizedUserIdsLength);
-void daveSessionGetMarshalledKeyPackage(DAVESessionHandle session,
-                                        uint8_t** keyPackage,
-                                        size_t* length);
-DAVEKeyRatchetHandle daveSessionGetKeyRatchet(DAVESessionHandle session, const char* userId);
-
-bool daveCommitResultIsFailed(DAVECommitResultHandle commitResultHandle);
-bool daveCommitResultIsIgnored(DAVECommitResultHandle commitResultHandle);
-void daveCommitResultDestroy(DAVECommitResultHandle commitResultHandle);
-void daveWelcomeResultDestroy(DAVEWelcomeResultHandle welcomeResultHandle);
-
-void daveKeyRatchetDestroy(DAVEKeyRatchetHandle keyRatchet);
-
-DAVEEncryptorHandle daveEncryptorCreate(void);
-void daveEncryptorDestroy(DAVEEncryptorHandle encryptor);
-void daveEncryptorSetKeyRatchet(DAVEEncryptorHandle encryptor,
-                                DAVEKeyRatchetHandle keyRatchet);
-void daveEncryptorSetPassthroughMode(DAVEEncryptorHandle encryptor, bool passthroughMode);
-void daveEncryptorAssignSsrcToCodec(DAVEEncryptorHandle encryptor,
-                                    uint32_t ssrc,
-                                    int codecType);
-uint16_t daveEncryptorGetProtocolVersion(DAVEEncryptorHandle encryptor);
-size_t daveEncryptorGetMaxCiphertextByteSize(DAVEEncryptorHandle encryptor,
-                                             int mediaType,
-                                             size_t frameSize);
-bool daveEncryptorHasKeyRatchet(DAVEEncryptorHandle encryptor);
-bool daveEncryptorIsPassthroughMode(DAVEEncryptorHandle encryptor);
-int daveEncryptorEncrypt(DAVEEncryptorHandle encryptor,
-                         int mediaType,
-                         uint32_t ssrc,
-                         const uint8_t* frame,
-                         size_t frameLength,
-                         uint8_t* encryptedFrame,
-                         size_t encryptedFrameCapacity,
-                         size_t* bytesWritten);
-
-DAVEDecryptorHandle daveDecryptorCreate(void);
-void daveDecryptorDestroy(DAVEDecryptorHandle decryptor);
-void daveDecryptorTransitionToKeyRatchet(DAVEDecryptorHandle decryptor,
-                                         DAVEKeyRatchetHandle keyRatchet);
-void daveDecryptorTransitionToPassthroughMode(DAVEDecryptorHandle decryptor, bool passthroughMode);
-int daveDecryptorDecrypt(DAVEDecryptorHandle decryptor,
-                         int mediaType,
-                         const uint8_t* encryptedFrame,
-                         size_t encryptedFrameLength,
-                         uint8_t* frame,
-                         size_t frameCapacity,
-                         size_t* bytesWritten);
-size_t daveDecryptorGetMaxPlaintextByteSize(DAVEDecryptorHandle decryptor,
-                                            int mediaType,
-                                            size_t encryptedFrameSize);
-CDEF;
-
     public const MEDIA_TYPE_AUDIO = 0;
     public const CODEC_OPUS = 1;
 
@@ -871,21 +772,29 @@ CDEF;
     }
 
     /**
-     * Resolves FFI C definitions, preferring the dave.h header file from the
-     * same install root as the resolved library, falling back to inline CDEF.
+     * Resolves FFI C definitions from the dave.h header file co-located with
+     * the resolved library. Throws if the header cannot be found or parsed.
      */
     private static function resolveDefinitions(string $libraryPath): string
     {
         $headerPath = self::deriveHeaderPath($libraryPath);
 
-        if ($headerPath !== null) {
-            $parsed = self::loadHeaderDefinitions($headerPath);
-            if ($parsed !== null) {
-                return self::FFI_TYPEDEF_PRELUDE."\n".$parsed;
-            }
+        if ($headerPath === null) {
+            throw new \RuntimeException(
+                'dave.h header not found alongside library at '.$libraryPath.'. '
+                .'Run scripts/setup-libdave.sh to install both the library and headers.'
+            );
         }
 
-        return self::FFI_TYPEDEF_PRELUDE."\n".self::DAVE_FFI_DEFINITIONS;
+        $parsed = self::loadHeaderDefinitions($headerPath);
+        if ($parsed === null) {
+            throw new \RuntimeException(
+                'Failed to parse dave.h header at '.$headerPath.'. '
+                .'The file may be empty or unreadable.'
+            );
+        }
+
+        return self::FFI_TYPEDEF_PRELUDE."\n".$parsed;
     }
 
     /**
