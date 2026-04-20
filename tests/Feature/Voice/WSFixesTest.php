@@ -17,11 +17,14 @@ namespace Discord\Tests\Feature\Voice;
 
 use Discord\Discord;
 use Discord\Factory\Factory;
+use Discord\Parts\Channel\Channel;
+use Discord\Parts\Part;
 use Discord\Parts\Voice\UserConnected;
 use Discord\Voice\Client;
 use Discord\Voice\Client\WS;
 use Discord\Voice\Dave\Runtime;
 use Discord\Voice\Dave\State;
+use Discord\Voice\VoiceClient;
 use Discord\WebSockets\Op;
 use Discord\WebSockets\Payload;
 use PHPUnit\Framework\TestCase;
@@ -98,6 +101,83 @@ it('VULN-14: handleDaveMlsInvalidCommitWelcome clears pending transition even wh
 
     // resetProtocolState() always clears pendingTransitionId, regardless of the ID parameter.
     expect($state->pendingTransitionId)->toBeNull();
+});
+
+// ---------------------------------------------------------------------------
+// VULN-15: Token not logged in debug output from handleSendingOfLoginFrame
+// ---------------------------------------------------------------------------
+
+it('VULN-15: handleSendingOfLoginFrame does not log the token value', function (): void {
+    $capturedLogs = [];
+    $capturingLogger = new class ($capturedLogs) extends \Psr\Log\AbstractLogger {
+        public function __construct(private array &$logs) {}
+
+        public function log($level, string|\Stringable $message, array $context = []): void
+        {
+            $this->logs[] = json_encode(['level' => $level, 'msg' => (string) $message, 'ctx' => $context]);
+        }
+    };
+
+    // Build a minimal Channel with guild_id set via the attributes array.
+    $channel = (new \ReflectionClass(Channel::class))->newInstanceWithoutConstructor();
+    $attrProp = new \ReflectionProperty(Part::class, 'attributes');
+    $attrProp->setAccessible(true);
+    $attrProp->setValue($channel, ['guild_id' => 'guild-test-123']);
+
+    // Build a minimal VoiceClient (Client subclass) as vc.
+    $vcMock = (new \ReflectionClass(Client::class))->newInstanceWithoutConstructor();
+    $channelProp = new \ReflectionProperty(VoiceClient::class, 'channel');
+    $channelProp->setAccessible(true);
+    $channelProp->setValue($vcMock, $channel);
+    $vcMock->sentLoginFrame = false;
+
+    // Build Discord with the capturing logger.
+    $discord = (new \ReflectionClass(Discord::class))->newInstanceWithoutConstructor();
+    $loggerProp = new \ReflectionProperty(Discord::class, 'logger');
+    $loggerProp->setAccessible(true);
+    $loggerProp->setValue($discord, $capturingLogger);
+
+    // WS is final — use real instance with a mock Ratchet socket so send() doesn't crash.
+    $ws = (new \ReflectionClass(WS::class))->newInstanceWithoutConstructor();
+
+    $mockSocket = invokeFixesWsMethod($this, 'getMockBuilder', [\Ratchet\Client\WebSocket::class])
+        ->disableOriginalConstructor()
+        ->onlyMethods(['send'])
+        ->getMock();
+    $mockSocket->method('send')->willReturn(null);
+
+    $socketProp = new \ReflectionProperty(WS::class, 'socket');
+    $socketProp->setAccessible(true);
+    $socketProp->setValue($ws, $mockSocket);
+
+    $vcProp = new \ReflectionProperty(WS::class, 'vc');
+    $vcProp->setAccessible(true);
+    $vcProp->setValue($ws, $vcMock);
+
+    $discordProp = new \ReflectionProperty(WS::class, 'discord');
+    $discordProp->setAccessible(true);
+    $discordProp->setValue($ws, $discord);
+
+    $token = 'super-secret-voice-token';
+
+    $dataProp = new \ReflectionProperty(WS::class, 'data');
+    $dataProp->setAccessible(true);
+    $dataProp->setValue($ws, ['user_id' => 'user-abc', 'token' => $token]);
+
+    $sentLoginProp = new \ReflectionProperty(WS::class, 'sentLoginFrame');
+    $sentLoginProp->setAccessible(true);
+    $sentLoginProp->setValue($ws, false);
+
+    $maxDaveProp = new \ReflectionProperty(WS::class, 'maxDaveProtocolVersion');
+    $maxDaveProp->setAccessible(true);
+    $maxDaveProp->setValue($ws, 0);
+
+    $method = new \ReflectionMethod(WS::class, 'handleSendingOfLoginFrame');
+    $method->setAccessible(true);
+    $method->invoke($ws);
+
+    $allLogs = implode(' ', $capturedLogs);
+    expect($allLogs)->not->toContain($token);
 });
 
 // ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ declare(strict_types=1);
 namespace Discord\Tests\Unit\Dave;
 
 use Discord\Voice\Dave\Runtime;
+use Discord\Voice\Dave\SessionHandle;
 use PHPUnit\Framework\TestCase;
 
 $originalDaveLibraryPath = null;
@@ -108,6 +109,51 @@ it('round trips passthrough frames with the native encryptor and decryptor', fun
         $decryptor->destroy();
     }
 });
+
+// VULN-10 regression: makeBytePointer null guard on empty payload
+
+it('buildMlsCommitWelcomeWithSession returns null for empty proposals payload without crash', function (): void {
+    Runtime::configureCallbacks(availabilityOverride: false);
+
+    $session = makeStubSessionHandle();
+
+    $this->assertNull(Runtime::buildMlsCommitWelcomeWithSession($session, '', []));
+});
+
+it('processCommit returns null for empty commit payload without crash', function (): void {
+    Runtime::configureCallbacks(availabilityOverride: false);
+
+    $session = makeStubSessionHandle();
+
+    $this->assertNull(Runtime::processCommit($session, ''));
+});
+
+it('processWelcome returns false for empty welcome payload without crash', function (): void {
+    Runtime::configureCallbacks(availabilityOverride: false);
+
+    $session = makeStubSessionHandle();
+
+    $this->assertFalse(Runtime::processWelcome($session, '', []));
+});
+
+it('setExternalSender returns false for empty sender payload without crash', function (): void {
+    Runtime::configureCallbacks(availabilityOverride: false);
+
+    $session = makeStubSessionHandle();
+
+    $this->assertFalse(Runtime::setExternalSender($session, ''));
+});
+
+function makeStubSessionHandle(): SessionHandle
+{
+    $session = (new \ReflectionClass(SessionHandle::class))->newInstanceWithoutConstructor();
+
+    $handleProp = new \ReflectionProperty(\Discord\Voice\Dave\NativeHandle::class, 'handle');
+    $handleProp->setAccessible(true);
+    $handleProp->setValue($session, null);
+
+    return $session;
+}
 
 function requireNativeDaveRuntime(?string $libraryPath): void
 {

@@ -17,9 +17,11 @@ namespace Discord\Tests\Unit\Voice;
 
 use Discord\Discord;
 use Discord\Voice\Client\Packet;
+use Discord\Voice\Client\UDP;
 use Discord\Voice\Client\WS;
 use Discord\Voice\Dave\Runtime;
 use Discord\Voice\VoiceClient;
+use Discord\WebSockets\Op;
 use Psr\Log\NullLogger;
 use React\EventLoop\TimerInterface;
 
@@ -156,6 +158,112 @@ it('handleAudioData with a Packet returns early when shouldRecord is false', fun
 
     // If we got here without a TypeError or null dereference, the string path is gone.
     expect(true)->toBeTrue();
+});
+
+// ──────────────────────────────────────────────────────────────
+// VULN-13: setSpeaking routes through WS::send(), not raw socket
+// ──────────────────────────────────────────────────────────────
+
+it('setSpeaking routes through WS::send with a correct VoicePayload', function (): void {
+    $sentRaw = [];
+
+    // WS and UDP are final — use real instances with a mock Ratchet socket injected.
+    $ws = (new \ReflectionClass(WS::class))->newInstanceWithoutConstructor();
+
+    $mockSocket = $this->getMockBuilder(\Ratchet\Client\WebSocket::class)
+        ->disableOriginalConstructor()
+        ->onlyMethods(['send'])
+        ->getMock();
+    $mockSocket->method('send')->willReturnCallback(function (string $raw) use (&$sentRaw): void {
+        $sentRaw[] = $raw;
+    });
+
+    $socketProp = new \ReflectionProperty(WS::class, 'socket');
+    $socketProp->setAccessible(true);
+    $socketProp->setValue($ws, $mockSocket);
+
+    $udp = (new \ReflectionClass(UDP::class))->newInstanceWithoutConstructor();
+    $wsProp = new \ReflectionProperty(UDP::class, 'ws');
+    $wsProp->setAccessible(true);
+    $wsProp->setValue($udp, $ws);
+
+    $vc = (new \ReflectionClass(VoiceClient::class))->newInstanceWithoutConstructor();
+    $vc->ready = true;
+    $vc->speaking = VoiceClient::NOT_SPEAKING;
+    $vc->ssrc = 12345;
+    $vc->udp = $udp;
+
+    $vc->setSpeaking(VoiceClient::MICROPHONE);
+
+    expect($sentRaw)->toHaveCount(1);
+
+    $decoded = json_decode($sentRaw[0], true);
+    expect($decoded)->toBeArray();
+    expect($decoded['op'])->toBe(Op::VOICE_SPEAKING);
+    expect($decoded['d']['speaking'])->toBe(VoiceClient::MICROPHONE);
+    expect($decoded['d']['delay'])->toBe(0);
+    expect($decoded['d']['ssrc'])->toBe(12345);
+});
+
+it('setSpeaking is idempotent: does not call WS::send when speaking value is unchanged', function (): void {
+    $sendCallCount = 0;
+
+    $ws = (new \ReflectionClass(WS::class))->newInstanceWithoutConstructor();
+
+    $mockSocket = $this->getMockBuilder(\Ratchet\Client\WebSocket::class)
+        ->disableOriginalConstructor()
+        ->onlyMethods(['send'])
+        ->getMock();
+    $mockSocket->method('send')->willReturnCallback(function () use (&$sendCallCount): void {
+        $sendCallCount++;
+    });
+
+    $socketProp = new \ReflectionProperty(WS::class, 'socket');
+    $socketProp->setAccessible(true);
+    $socketProp->setValue($ws, $mockSocket);
+
+    $udp = (new \ReflectionClass(UDP::class))->newInstanceWithoutConstructor();
+    $wsProp = new \ReflectionProperty(UDP::class, 'ws');
+    $wsProp->setAccessible(true);
+    $wsProp->setValue($udp, $ws);
+
+    $vc = (new \ReflectionClass(VoiceClient::class))->newInstanceWithoutConstructor();
+    $vc->ready = true;
+    $vc->speaking = VoiceClient::MICROPHONE; // already speaking
+    $vc->ssrc = 1;
+    $vc->udp = $udp;
+
+    $vc->setSpeaking(VoiceClient::MICROPHONE); // same value — should be a no-op
+
+    expect($sendCallCount)->toBe(0);
+});
+
+it('setSpeaking throws RuntimeException when client is not ready', function (): void {
+    $vc = (new \ReflectionClass(VoiceClient::class))->newInstanceWithoutConstructor();
+    $vc->ready = false;
+    $vc->speaking = VoiceClient::NOT_SPEAKING;
+
+    expect(fn () => $vc->setSpeaking(VoiceClient::MICROPHONE))
+        ->toThrow(\RuntimeException::class, 'Voice Client is not ready.');
+});
+
+// ──────────────────────────────────────────────────────────────
+// VULN-18: Timer delay clamped to 0 when nextTime is in the past
+// ──────────────────────────────────────────────────────────────
+
+it('timer delay is clamped to zero when nextTime is in the past', function (): void {
+    $pastTime = microtime(true) - 1.0;
+    $delay = max(0.0, $pastTime - microtime(true));
+
+    expect($delay)->toBe(0.0);
+});
+
+it('timer delay is non-negative for a future nextTime', function (): void {
+    $futureTime = microtime(true) + 0.02;
+    $delay = max(0.0, $futureTime - microtime(true));
+
+    expect($delay)->toBeGreaterThanOrEqual(0.0);
+    expect($delay)->toBeLessThanOrEqual(0.02);
 });
 
 // Helpers

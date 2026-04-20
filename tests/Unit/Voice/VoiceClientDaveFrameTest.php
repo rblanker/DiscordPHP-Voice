@@ -85,6 +85,36 @@ it('decryptDaveFrame passes frame through unchanged when DAVE protocol version i
     expect($voiceClient->decryptDaveFrame('audio'))->toBe('audio');
 });
 
+// VULN-21 regression: encryptDaveFrame must drop frame (return '') when encryption fails and DAVE is active.
+
+it('encryptDaveFrame drops frame by returning empty string when encryption fails and passthroughMode is false', function (): void {
+    Runtime::configureCallbacks(
+        frameEncryptor: fn (string $frame, int $protocolVersion): ?string => null
+    );
+
+    $voiceClient = makeVoiceClientWithProtocolVersion(1);
+    // setProtocolVersion(1) already sets passthroughMode = false on the State.
+
+    expect($voiceClient->encryptDaveFrame('audio'))->toBe('');
+});
+
+it('encryptDaveFrame returns raw frame when encryption fails and passthroughMode is true', function (): void {
+    Runtime::configureCallbacks(
+        frameEncryptor: fn (string $frame, int $protocolVersion): ?string => null
+    );
+
+    $voiceClient = makeVoiceClientWithProtocolVersion(1);
+
+    // Override passthroughMode to true to simulate DAVE not yet fully active.
+    $ws = $voiceClient->udp->ws;
+    $daveStateProp = new \ReflectionProperty(WS::class, 'daveState');
+    $daveStateProp->setAccessible(true);
+    $daveState = $daveStateProp->getValue($ws);
+    $daveState->passthroughMode = true;
+
+    expect($voiceClient->encryptDaveFrame('audio'))->toBe('audio');
+});
+
 function makeVoiceClientWithProtocolVersion(int $protocolVersion): VoiceClient
 {
     $voiceClient = (new \ReflectionClass(VoiceClient::class))->newInstanceWithoutConstructor();
@@ -102,6 +132,10 @@ function makeVoiceClientWithProtocolVersion(int $protocolVersion): VoiceClient
     $daveStateProperty = new \ReflectionProperty(WS::class, 'daveState');
     $daveStateProperty->setAccessible(true);
     $daveStateProperty->setValue($ws, $state);
+
+    $ssrcProp = new \ReflectionProperty(VoiceClient::class, 'ssrc');
+    $ssrcProp->setAccessible(true);
+    $ssrcProp->setValue($voiceClient, null);
 
     $udp->ws = $ws;
     $voiceClient->udp = $udp;
