@@ -216,7 +216,7 @@ sequenceDiagram
     participant RT as Dave\Runtime
     participant ST as Dave\State
 
-    GW-->>WS: Op 18 Client Connect<br/>{ user_ids: [...] }
+    GW-->>WS: Op 11 Client Connect<br/>{ user_ids: [...] }
     WS->>ST: addRecognizedUsers(userIds)
 
     Note over WS: When a member leaves:
