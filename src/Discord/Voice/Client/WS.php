@@ -543,6 +543,10 @@ final class WS
         $protocolVersion = $this->daveState->pendingProtocolVersion ?? $this->daveState->protocolVersion;
 
         if ($protocolVersion <= 0) {
+            $this->discord->logger->warning('DAVE protocol downgrading to v0 (passthrough); resetting session.', [
+                'previous_version' => $this->daveState->protocolVersion,
+            ]);
+
             if ($this->daveState->session !== null) {
                 DaveRuntime::resetSession($this->daveState->session);
             }
@@ -799,6 +803,13 @@ final class WS
         }
 
         // libdave availability is enforced in __construct(); this point is always reached with a loaded runtime.
+        if ($protocolVersion > $this->maxDaveProtocolVersion) {
+            $this->discord->logger->warning('DAVE: server offered protocol version {offered} but max supported is {max}; clamping.', [
+                'offered' => $protocolVersion,
+                'max' => $this->maxDaveProtocolVersion,
+            ]);
+        }
+
         return min($protocolVersion, $this->maxDaveProtocolVersion);
     }
 
