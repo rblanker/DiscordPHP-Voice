@@ -199,6 +199,25 @@ it('handleDavePrepareEpoch sets latestPreparedTransitionVersion when no transiti
         ->and($state->pendingTransitionId)->toBeNull();
 });
 
+it('handleDavePrepareEpoch keeps passthroughMode true when initializeDaveRuntimeState fails', function (): void {
+    $sentPayloads = [];
+    $ws = makeWsForSessionInitTest($this, $sentPayloads);
+
+    // Force createSession to fail so initializeDaveRuntimeState returns false.
+    Runtime::configureCallbacks(createSessionCallback: fn () => null);
+
+    $state = getSessionInitDaveState($ws);
+    $state->passthroughMode = false; // simulate previously active DAVE
+
+    $data = new \stdClass();
+    $data->d = ['epoch' => 1, 'dave_protocol_version' => 1];
+
+    invokeSessionInitMethod($ws, 'handleDavePrepareEpoch', [$data]);
+
+    expect($state->passthroughMode)->toBeTrue()
+        ->and($sentPayloads)->toBeEmpty();
+});
+
 // ──────────────────────────────────────────────────────────────
 // handleDaveMlsExternalSender
 // ──────────────────────────────────────────────────────────────

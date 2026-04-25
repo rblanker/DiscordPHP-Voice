@@ -601,6 +601,13 @@ final class WS
         }
 
         if (! $this->initializeDaveRuntimeState($protocolVersion, $epoch === 1)) {
+            $this->discord->logger->error('DAVE session initialization failed; DAVE will remain in passthrough mode.', [
+                'protocol_version' => $protocolVersion,
+                'epoch' => $epoch,
+            ]);
+            $this->daveState->passthroughMode = true;
+            $this->applySelfDaveEncryptor(0);
+
             return;
         }
 
