@@ -72,7 +72,7 @@ jobs:
         env:
           XDEBUG_MODE: coverage
           DISCORDPHP_DAVE_LIBRARY: ${{ github.workspace }}/.cache/libdave/lib/libdave.so
-        run: ./vendor/bin/pest --coverage-clover coverage.xml --no-coverage-on-zero
+        run: ./vendor/bin/pest --coverage-clover coverage.xml
       - name: Upload to Codecov
         uses: codecov/codecov-action@v4
         with:
