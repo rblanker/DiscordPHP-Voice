@@ -17,12 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `composer check` aggregate script (pint + cs:check + unit)
 - `composer cs:check` dry-run style check
 - EditorConfig CI validation job
+- Comprehensive test suite expansion (402 tests / 1094 assertions): new files cover voice exceptions, VoiceClient playback guards, VoiceClient receive flow, Manager join-channel permission checks, WS gateway handlers, WS heartbeat/resume seq_ack bookkeeping, UDP transport (IP discovery + sendBuffer), Packet encrypt/decrypt roundtrip, Ogg edge cases (BOS/EOS/continued/multi-segment), Dave Runtime callback overrides, small-parts (User / HeaderValuesEnum / Dave handles / UserConnected), and process wrappers (Ffmpeg / DCA / OpusFfi)
+- `tests/Integration/VoiceConnectionTest.php` — live voice gateway connection tests (require `DISCORD_BOT_TOKEN` + `CHANNEL_ID` env vars)
 
 ### Fixed
 
 - `VoiceClient`: incorrect `DCA` class reference (was `Dca`)
 - `VoiceClient`: float-to-int cast on timestamp calculation
 - `RecieveStream`: `write()` and `pipe()` missing return values
+- `VoiceClient::$ssrcToUserId` — changed visibility from `protected` to `public` so `WS::handleSpeaking` can write SSRC→user_id mappings from outside the class (previously threw a fatal error whenever a SPEAKING payload included an `ssrc`)
+- `Client\WS` — binary voice gateway frames now emit the `ws-binary-message` event so DAVE binary opcodes reach the application layer
+- `Dave\State::$groupId` — fixed resolution via `isset()` on a magic `__get` property (always returned `false`); now reads directly from the backing store
+- `Client\WS` — stale MLS proposals no longer cause an infinite `INVALID_COMMIT_WELCOME` loop; three consecutive proposal failures close the socket with a descriptive error instead
 
 ### Changed
 
