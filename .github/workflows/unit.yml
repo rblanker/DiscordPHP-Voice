@@ -45,3 +45,10 @@ jobs:
         run: composer unit
       - name: Run PHPLint
         run: phplint
+
+  editorconfig:
+    name: EditorConfig
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: editorconfig-checker/action-editorconfig-checker@v2

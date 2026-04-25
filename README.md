@@ -18,24 +18,32 @@ Before you start using this Library, you **need** to know how PHP works, you nee
 ### DAVE (Discord Audio/Video End-to-End Encryption) runtime support
 
 - **[📊 Visual DAVE Protocol Guide →](docs/DAVE.md)** — Mermaid diagrams covering architecture, MLS lifecycle, media encryption pipeline, and all DAVE opcodes.
+- **[🎵 Audio Pipeline Guide →](docs/AUDIO_PIPELINE.md)** — Mermaid diagrams covering outbound/inbound audio flow, playback state machine, and format chain.
 - DAVE protocol negotiation is now supported at the voice gateway layer.
 - Binary DAVE voice opcodes are parsed and routed.
 - If [`ext-ffi`](https://www.php.net/manual/en/book.ffi.php) is enabled and `libdave.so` is available, the runtime will load real libdave session and media APIs and detect the maximum supported DAVE protocol version.
-- Use `./scripts/setup-libdave.sh` on Linux x64 to fetch the published `discord/libdave` release asset into `.cache/libdave` without vendoring the binary into git.
-- Export `DISCORDPHP_DAVE_LIBRARY=$PWD/.cache/libdave/lib/libdave.so` to force the runtime to use the repo-local shared library path.
+- Use `./scripts/setup-libdave.sh` to fetch the published `discord/libdave` release asset into `.cache/libdave` without vendoring the binary into git. The script auto-detects your OS and architecture (Linux, macOS, Windows — x64 and ARM64).
+- Export `DISCORDPHP_DAVE_LIBRARY` pointing to the platform library (e.g. `.cache/libdave/lib/libdave.so` on Linux) to force the runtime to use the repo-local shared library path.
 - CI uses the same setup script and enables `ext-ffi` so native DAVE coverage stays runnable.
 - If libdave is unavailable, the client automatically falls back to protocol version `0` (transport-only behavior).
 
-#### Local Linux x64 setup
+#### Local setup
 
 ```bash
 COMPOSER_ROOT_VERSION=dev-main composer install --no-interaction --prefer-dist
 ./scripts/setup-libdave.sh
+
+# Linux
 export DISCORDPHP_DAVE_LIBRARY="$PWD/.cache/libdave/lib/libdave.so"
+# macOS
+# export DISCORDPHP_DAVE_LIBRARY="$PWD/.cache/libdave/lib/libdave.dylib"
+# Windows (Git Bash / PowerShell)
+# export DISCORDPHP_DAVE_LIBRARY="$PWD/.cache/libdave/bin/libdave.dll"
+
 ./vendor/bin/pest tests/Unit/Dave/RuntimeTest.php
 ```
 
-The setup script currently targets the published Linux x64 BoringSSL release asset `libdave-Linux-X64-boringssl.zip` from `discord/libdave`.
+The script auto-detects your OS and architecture (Linux, macOS, Windows — x64 and ARM64). Set `DISCORDPHP_DAVE_LIBRARY` to the path printed by the script.
 Use the bundled Pest runner for local validation. `composer unit` runs the default suite with TestDox output, while `composer pest` keeps the parallel full-suite command.
 
 ### Basic Example
