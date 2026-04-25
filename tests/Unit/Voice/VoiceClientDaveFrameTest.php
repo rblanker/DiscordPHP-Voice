@@ -22,6 +22,7 @@ use Discord\Voice\Client\WS;
 use Discord\Voice\Dave\Runtime;
 use Discord\Voice\Dave\State;
 use Discord\Voice\VoiceClient;
+use Psr\Log\AbstractLogger;
 use Psr\Log\NullLogger;
 
 afterEach(function (): void {
@@ -128,6 +129,145 @@ function makeVoiceClientWithProtocolVersion(int $protocolVersion): VoiceClient
     $loggerProperty = new \ReflectionProperty(Discord::class, 'logger');
     $loggerProperty->setAccessible(true);
     $loggerProperty->setValue($discord, new NullLogger());
+
+    $daveStateProperty = new \ReflectionProperty(WS::class, 'daveState');
+    $daveStateProperty->setAccessible(true);
+    $daveStateProperty->setValue($ws, $state);
+
+    $ssrcProp = new \ReflectionProperty(VoiceClient::class, 'ssrc');
+    $ssrcProp->setAccessible(true);
+    $ssrcProp->setValue($voiceClient, null);
+
+    $udp->ws = $ws;
+    $voiceClient->udp = $udp;
+    $voiceClient->discord = $discord;
+
+    return $voiceClient;
+}
+
+// ---------------------------------------------------------------------------
+// t8: encrypt/decrypt failure counters
+// ---------------------------------------------------------------------------
+
+it('encryptDaveFrame increments encryptFailureCount on daveState when encryption fails', function (): void {
+    // No frameEncryptor configured and no libdave → encryptMediaFrame returns null → failure.
+    $voiceClient = makeVoiceClientWithProtocolVersion(1);
+    $daveState = getDaveStateFromClient($voiceClient);
+
+    expect($daveState->encryptFailureCount)->toBe(0);
+
+    $voiceClient->encryptDaveFrame('audio');
+
+    expect($daveState->encryptFailureCount)->toBe(1);
+});
+
+it('encryptDaveFrame logs warning after 100 consecutive encrypt failures', function (): void {
+    $logs = [];
+    $voiceClient = makeVoiceClientForCountTest(1, $logs);
+    $daveState = getDaveStateFromClient($voiceClient);
+
+    // Simulate 99 previous failures so the next call hits the modulo-100 threshold.
+    $daveState->encryptFailureCount = 99;
+
+    $voiceClient->encryptDaveFrame('audio');
+
+    expect($daveState->encryptFailureCount)->toBe(100);
+
+    $warningLogs = array_filter($logs, fn (string $e) => str_contains($e, '"level":"warning"'));
+    expect($warningLogs)->not->toBeEmpty();
+
+    $allText = implode(' ', $logs);
+    expect($allText)->toContain('DAVE encrypt failure count: 100');
+});
+
+it('decryptDaveFrame increments decryptFailureCount on daveState when decryption returns null', function (): void {
+    // frameDecryptor returning null triggers the null branch that increments the counter.
+    Runtime::configureCallbacks(
+        frameDecryptor: fn (string $frame, int $protocolVersion): ?string => null
+    );
+
+    $voiceClient = makeVoiceClientWithProtocolVersion(1);
+    $daveState = getDaveStateFromClient($voiceClient);
+
+    expect($daveState->decryptFailureCount)->toBe(0);
+
+    $voiceClient->decryptDaveFrame('audio');
+
+    expect($daveState->decryptFailureCount)->toBe(1);
+});
+
+it('decryptDaveFrame logs warning after 100 consecutive decrypt failures', function (): void {
+    Runtime::configureCallbacks(
+        frameDecryptor: fn (string $frame, int $protocolVersion): ?string => null
+    );
+
+    $logs = [];
+    $voiceClient = makeVoiceClientForCountTest(1, $logs);
+    $daveState = getDaveStateFromClient($voiceClient);
+
+    $daveState->decryptFailureCount = 99;
+
+    $voiceClient->decryptDaveFrame('audio');
+
+    expect($daveState->decryptFailureCount)->toBe(100);
+
+    $warningLogs = array_filter($logs, fn (string $e) => str_contains($e, '"level":"warning"'));
+    expect($warningLogs)->not->toBeEmpty();
+
+    $allText = implode(' ', $logs);
+    expect($allText)->toContain('DAVE decrypt failure count: 100');
+});
+
+it('State::resetProtocolState resets encryptFailureCount and decryptFailureCount to zero', function (): void {
+    $state = new State();
+    $state->encryptFailureCount = 42;
+    $state->decryptFailureCount = 17;
+
+    $state->resetProtocolState();
+
+    expect($state->encryptFailureCount)->toBe(0)
+        ->and($state->decryptFailureCount)->toBe(0);
+});
+
+// ---------------------------------------------------------------------------
+// Additional helpers
+// ---------------------------------------------------------------------------
+
+function getDaveStateFromClient(VoiceClient $voiceClient): State
+{
+    $daveStateProp = new \ReflectionProperty(WS::class, 'daveState');
+    $daveStateProp->setAccessible(true);
+
+    return $daveStateProp->getValue($voiceClient->udp->ws);
+}
+
+/**
+ * @param array<int, string> $logs Passed by reference; captures serialised log entries.
+ */
+function makeVoiceClientForCountTest(int $protocolVersion, array &$logs): VoiceClient
+{
+    $capturingLogger = new class($logs) extends AbstractLogger {
+        public function __construct(private array &$entries)
+        {
+        }
+
+        public function log($level, string|\Stringable $message, array $context = []): void
+        {
+            $this->entries[] = json_encode(['level' => $level, 'msg' => (string) $message, 'ctx' => $context]);
+        }
+    };
+
+    $voiceClient = (new \ReflectionClass(VoiceClient::class))->newInstanceWithoutConstructor();
+    $discord = (new \ReflectionClass(Discord::class))->newInstanceWithoutConstructor();
+    $ws = (new \ReflectionClass(WS::class))->newInstanceWithoutConstructor();
+    $udp = (new \ReflectionClass(UDP::class))->newInstanceWithoutConstructor();
+
+    $state = new State();
+    $state->setProtocolVersion($protocolVersion);
+
+    $loggerProperty = new \ReflectionProperty(Discord::class, 'logger');
+    $loggerProperty->setAccessible(true);
+    $loggerProperty->setValue($discord, $capturingLogger);
 
     $daveStateProperty = new \ReflectionProperty(WS::class, 'daveState');
     $daveStateProperty->setAccessible(true);
