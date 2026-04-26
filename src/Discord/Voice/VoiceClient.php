@@ -191,21 +191,21 @@ class VoiceClient extends EventEmitter
      *
      * @var ExCollectionInterface<Speaking> Status of people speaking.
      */
-    public $speakingStatus;
+    protected $speakingStatus;
 
     /**
      * O(1) map from SSRC to user ID, kept in sync with speakingStatus.
      *
      * @var array<int, string>
      */
-    public array $ssrcToUserId = [];
+    protected array $ssrcToUserId = [];
 
     /**
      * Collection of voice decoders.
      *
      * @var ExCollectionInterface<Process> Voice decoders.
      */
-    public $voiceDecoders;
+    public array $voiceDecoders = [];
 
     /**
      * Voice audio recieve streams.
@@ -1326,6 +1326,23 @@ class VoiceClient extends EventEmitter
     private function resolveDaveRemoteUserId(Packet $packet): ?string
     {
         return $this->ssrcToUserId[$packet->getSSRC()] ?? null;
+    }
+
+    /**
+     * Updates speaking status and SSRC→user-ID mapping for a user.
+     *
+     * Called by the voice gateway when a speaking event is received.
+     * Internal use only — public so the WS client can call it without
+     * tight coupling via reflection.
+     *
+     * @internal
+     */
+    public function updateSpeakingStatus(Speaking $speaking): void
+    {
+        $this->speakingStatus[$speaking->user_id] = $speaking;
+        if ($speaking->ssrc !== null) {
+            $this->ssrcToUserId[$speaking->ssrc] = (string) $speaking->user_id;
+        }
     }
 
     /**

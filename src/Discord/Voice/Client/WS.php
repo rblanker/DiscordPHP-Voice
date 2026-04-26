@@ -391,10 +391,7 @@ final class WS
         $speaking = $this->discord->factory(Speaking::class, (array) $data->d, true);
 
         $this->discord->logger->debug('received speaking packet', ['data' => json_decode(json_encode($data->d), true)]);
-        $this->vc->speakingStatus[$speaking->user_id] = $speaking;
-        if (isset($speaking->user_id, $speaking->ssrc)) {
-            $this->vc->ssrcToUserId[$speaking->ssrc] = (string) $speaking->user_id;
-        }
+        $this->vc->updateSpeakingStatus($speaking);
         $this->vc->emit('speaking', [$speaking->speaking, $speaking->user_id, $this->vc]);
         $this->vc->emit("speaking.{$speaking->user_id}", [$speaking->speaking, $this->vc]);
     }
