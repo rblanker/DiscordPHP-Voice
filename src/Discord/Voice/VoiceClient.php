@@ -457,6 +457,23 @@ class VoiceClient extends EventEmitter
 
                 return $deferred->promise();
             }
+
+            // Block literal private/reserved/loopback IP addresses to prevent SSRF.
+            // DNS-based rebinding is explicitly out of scope.
+            $host = parse_url($file, PHP_URL_HOST);
+            if ($host !== null) {
+                $bare = ltrim(rtrim($host, ']'), '['); // strip IPv6 brackets
+                if (filter_var($bare, FILTER_VALIDATE_IP) !== false) {
+                    $isPublic = filter_var($bare, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
+                    if (! $isPublic) {
+                        $deferred->reject(new \InvalidArgumentException(
+                            'Remote playback does not allow private or reserved IP addresses.'
+                        ));
+
+                        return $deferred->promise();
+                    }
+                }
+            }
         }
 
         $process = Ffmpeg::encode($file, volume: $this->getDbVolume());
@@ -611,28 +628,7 @@ class VoiceClient extends EventEmitter
                 return;
             }
 
-            // increment sequence
-            // uint16 overflow protection
-            if (++$this->seq >= 2 ** 16) {
-                $this->seq = 0;
-            }
-
-            // increment nonce counter independently — must NOT reset with seq
-            // uint32 overflow protection
-            if (++$this->nonce >= 2 ** 32) {
-                $this->nonce = 0;
-                $this->discord->getLogger()->critical('Voice nonce counter wrapped at 2^32. Cryptographic safety requires reconnection.', [
-                    'guild' => $this->channel->guild_id ?? null,
-                ]);
-            }
-
             $this->udp->sendBuffer($packet);
-
-            // increment timestamp
-            // uint32 overflow protection
-            if (($this->timestamp += ($this->frameSize * 48)) >= 2 ** 32) {
-                $this->timestamp = 0;
-            }
 
             $nextTime = $this->startTime + (20.0 / 1000.0) * $loops;
             $delay = max(0.0, $nextTime - microtime(true));
@@ -754,18 +750,6 @@ class VoiceClient extends EventEmitter
             return $this->buffer->read($opusLength, null, 1000);
         })->then(function ($opus) use ($deferred) {
             $this->udp->sendBuffer($opus);
-
-            // increment sequence
-            // uint16 overflow protection
-            if (++$this->seq >= 2 ** 16) {
-                $this->seq = 0;
-            }
-
-            // increment timestamp
-            // uint32 overflow protection
-            if (($this->timestamp += ($this->frameSize * 48)) >= 2 ** 32) {
-                $this->timestamp = 0;
-            }
 
             $this->readOpusTimer = $this->discord->getLoop()->addTimer(($this->frameSize - 1) / 1000, fn () => $this->readDCAOpus($deferred));
         }, function () use ($deferred) {
@@ -1547,11 +1531,15 @@ class VoiceClient extends EventEmitter
     {
         return $this->once('ready', function () {
             $this->discord->getLogger()->info('voice client is ready');
-            if (isset($this->manager->clients[$this->channel->guild_id])) {
-                $this->disconnect();
+            if ($this->manager !== null &&
+                isset($this->manager->clients[$this->channel->guild_id]) &&
+                $this->manager->clients[$this->channel->guild_id] !== $this) {
+                $this->manager->clients[$this->channel->guild_id]->disconnect();
             }
 
-            $this->manager->clients[$this->channel->guild_id] = $this;
+            if ($this->manager !== null) {
+                $this->manager->clients[$this->channel->guild_id] = $this;
+            }
 
             $this->setBitrate($this->channel->bitrate);
 
@@ -1559,14 +1547,18 @@ class VoiceClient extends EventEmitter
             $this->deferred->resolve($this);
         })
         ->once('error', function ($e) {
-            $this->disconnect();
             $this->discord->getLogger()->error('error initializing voice client', ['e' => $e->getMessage()]);
+            if ($this->manager !== null) {
+                unset($this->manager->clients[$this->channel->guild_id]);
+            }
             $this->deferred->reject($e);
         })
         ->once('close', function () {
-            $this->disconnect();
             $this->discord->getLogger()->warning('voice client closed');
-            unset($this->manager->clients[$this->channel->guild_id]);
+            if ($this->manager !== null) {
+                unset($this->manager->clients[$this->channel->guild_id]);
+            }
+            $this->deferred->reject(new \RuntimeException('Voice client closed.'));
         })
         ->start();
     }
