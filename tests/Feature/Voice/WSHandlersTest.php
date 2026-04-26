@@ -21,6 +21,7 @@ use Discord\Voice\Client;
 use Discord\Voice\Client\WS;
 use Discord\Voice\Dave\Runtime;
 use Discord\Voice\Dave\State;
+use Discord\Voice\Speaking;
 use Discord\WebSockets\Op;
 use Discord\WebSockets\Payload;
 use PHPUnit\Framework\TestCase;
@@ -133,11 +134,7 @@ it('handleSpeaking registers the user payload in speakingStatus and emits speaki
     $sentPayloads = [];
     $ws = makeWsForHandlersTest($this, $sentPayloads);
 
-    $speaking = new class() {
-        public string $user_id = '12345';
-        public int $ssrc = 99;
-        public bool $speaking = true;
-    };
+    $speaking = makeHandlersSpeaking('12345', 99, true);
     setHandlersFactoryReturn($ws, $speaking);
 
     invokeHandlersMethod($ws, 'handleSpeaking', [new Payload(Op::VOICE_SPEAKING, [
@@ -148,8 +145,8 @@ it('handleSpeaking registers the user payload in speakingStatus and emits speaki
 
     $events = array_map(fn ($e) => $e[0], iterator_to_array(handlersTestStore($ws, 'emittedEvents')));
 
-    expect($ws->vc->speakingStatus)->toHaveKey('12345')
-        ->and($ws->vc->speakingStatus['12345'])->toBe($speaking)
+    expect(getHandlersSpeakingStatus($ws->vc))->toHaveKey('12345')
+        ->and(getHandlersSpeakingStatus($ws->vc)['12345'])->toBe($speaking)
         ->and(getHandlersSsrcMap($ws->vc))->toBe([99 => '12345'])
         ->and($events)->toContain('speaking')
         ->and($events)->toContain('speaking.12345');
@@ -159,11 +156,7 @@ it('handleSpeaking does not populate ssrcToUserId when ssrc is missing', functio
     $sentPayloads = [];
     $ws = makeWsForHandlersTest($this, $sentPayloads);
 
-    $speaking = new class() {
-        public string $user_id = 'u-without-ssrc';
-        public ?int $ssrc = null;
-        public bool $speaking = false;
-    };
+    $speaking = makeHandlersSpeaking('u-without-ssrc', null, false);
     setHandlersFactoryReturn($ws, $speaking);
 
     invokeHandlersMethod($ws, 'handleSpeaking', [new Payload(Op::VOICE_SPEAKING, [
@@ -171,7 +164,7 @@ it('handleSpeaking does not populate ssrcToUserId when ssrc is missing', functio
         'speaking' => 0,
     ])]);
 
-    expect($ws->vc->speakingStatus)->toHaveKey('u-without-ssrc')
+    expect(getHandlersSpeakingStatus($ws->vc))->toHaveKey('u-without-ssrc')
         ->and(getHandlersSsrcMap($ws->vc))->toBeEmpty();
 });
 
@@ -362,8 +355,11 @@ function makeWsForHandlersTest(TestCase $test, array &$sentPayloads): WS
     $vc->ready = false;
     $vc->reconnecting = false;
     $vc->deaf = false;
-    $vc->speakingStatus = [];
     $vc->users = [];
+
+    $speakingStatusProp = new \ReflectionProperty(\Discord\Voice\VoiceClient::class, 'speakingStatus');
+    $speakingStatusProp->setAccessible(true);
+    $speakingStatusProp->setValue($vc, []);
 
     $ssrcToUserIdProp = new \ReflectionProperty(\Discord\Voice\VoiceClient::class, 'ssrcToUserId');
     $ssrcToUserIdProp->setAccessible(true);
@@ -443,6 +439,14 @@ function getHandlersSsrcMap(object $vc): array
     return $prop->getValue($vc);
 }
 
+function getHandlersSpeakingStatus(object $vc): mixed
+{
+    $prop = new \ReflectionProperty(\Discord\Voice\VoiceClient::class, 'speakingStatus');
+    $prop->setAccessible(true);
+
+    return $prop->getValue($vc);
+}
+
 /**
  * Force the next call to $discord->factory(...) to return $value.
  */
@@ -503,4 +507,19 @@ function invokeHandlersMethod(object $object, string $method, array $arguments =
     $reflectionMethod->setAccessible(true);
 
     return $reflectionMethod->invokeArgs($object, $arguments);
+}
+
+function makeHandlersSpeaking(string $userId, ?int $ssrc, bool $isSpeaking): Speaking
+{
+    $speaking = (new \ReflectionClass(Speaking::class))->newInstanceWithoutConstructor();
+    $attrs = new \ReflectionProperty(Speaking::class, 'attributes');
+    $attrs->setAccessible(true);
+    $attrs->setValue($speaking, [
+        'user_id'  => $userId,
+        'ssrc'     => $ssrc,
+        'speaking' => $isSpeaking ? 1 : 0,
+        'delay'    => 0,
+    ]);
+
+    return $speaking;
 }

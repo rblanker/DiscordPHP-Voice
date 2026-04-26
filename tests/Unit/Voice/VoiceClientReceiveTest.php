@@ -57,7 +57,9 @@ it('stopRecording() clears recording state', function (): void {
 
     $vc->voiceDecoders = [];
     $vc->receiveStreams = [];
-    $vc->speakingStatus = Collection::for(Speaking::class, 'ssrc');
+    $speakingStatusProp = new \ReflectionProperty(VoiceClient::class, 'speakingStatus');
+    $speakingStatusProp->setAccessible(true);
+    $speakingStatusProp->setValue($vc, Collection::for(Speaking::class, 'ssrc'));
     $ssrcMap = new \ReflectionProperty(VoiceClient::class, 'ssrcToUserId');
     $ssrcMap->setAccessible(true);
     $ssrcMap->setValue($vc, [123 => 'user-1']);
@@ -93,7 +95,7 @@ it('handleAudioData() ignores packets with unknown SSRC', function (): void {
     [$vc] = makeVcForRecord();
     $vc->record();
 
-    $vc->speakingStatus = Collection::for(Speaking::class, 'ssrc');
+    setVcSpeakingStatus($vc, Collection::for(Speaking::class, 'ssrc'));
 
     $emitted = [];
     $vc->on('raw', function () use (&$emitted): void {
@@ -112,8 +114,9 @@ it('handleAudioData() ignores packets with empty decrypted audio', function (): 
     $vc->record();
 
     $ssrc = 1234;
-    $vc->speakingStatus = Collection::for(Speaking::class, 'ssrc');
-    $vc->speakingStatus->pushItem(makeSpeaking($ssrc, 'user-1'));
+    $col = Collection::for(Speaking::class, 'ssrc');
+    $col->pushItem(makeSpeaking($ssrc, 'user-1'));
+    setVcSpeakingStatus($vc, $col);
 
     $emitted = [];
     $vc->on('raw', function () use (&$emitted): void {
@@ -138,8 +141,9 @@ it('handleAudioData() lazily creates a ReceiveStream and wires channel-opus + ch
     $vc->record();
 
     $ssrc = 5555;
-    $vc->speakingStatus = Collection::for(Speaking::class, 'ssrc');
-    $vc->speakingStatus->pushItem(makeSpeaking($ssrc, 'user-xyz'));
+    $col = Collection::for(Speaking::class, 'ssrc');
+    $col->pushItem(makeSpeaking($ssrc, 'user-xyz'));
+    setVcSpeakingStatus($vc, $col);
 
     // Stub createDecoder so it does NOT spawn ffmpeg, but installs a fake
     // decoder whose stdin reports as not writable, forcing handleAudioData
@@ -196,8 +200,9 @@ it('handleAudioData() reuses an existing ReceiveStream and does not recreate the
     $vc->record();
 
     $ssrc = 7777;
-    $vc->speakingStatus = Collection::for(Speaking::class, 'ssrc');
-    $vc->speakingStatus->pushItem(makeSpeaking($ssrc, 'user-existing'));
+    $col = Collection::for(Speaking::class, 'ssrc');
+    $col->pushItem(makeSpeaking($ssrc, 'user-existing'));
+    setVcSpeakingStatus($vc, $col);
 
     $existingStream = new ReceiveStream();
     $vc->receiveStreams = [$ssrc => $existingStream];
@@ -239,6 +244,13 @@ function makeVcForRecord(): array
     initVcForReceive($vc);
 
     return [$vc];
+}
+
+function setVcSpeakingStatus(VoiceClient $vc, mixed $value): void
+{
+    $prop = new \ReflectionProperty(VoiceClient::class, 'speakingStatus');
+    $prop->setAccessible(true);
+    $prop->setValue($vc, $value);
 }
 
 function initVcForReceive(VoiceClient $vc): void

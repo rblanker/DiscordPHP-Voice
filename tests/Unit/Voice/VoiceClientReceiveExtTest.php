@@ -56,8 +56,9 @@ it('createDecoder() is called exactly once for a new SSRC and reused on subseque
     $vc->receiveStreams  = [];
 
     $ssrc = 1001;
-    $vc->speakingStatus = Collection::for(Speaking::class, 'ssrc');
-    $vc->speakingStatus->pushItem(makeSpeakingExt($ssrc, 'user-1001'));
+    $col = Collection::for(Speaking::class, 'ssrc');
+    $col->pushItem(makeSpeakingExt($ssrc, 'user-1001'));
+    setVcSpeakingStatusExt($vc, $col);
 
     $fakeDecoder = makeFakeDecoderExt(writable: false);
 
@@ -91,8 +92,9 @@ it('handleAudioData() silently drops the Opus silence frame without throwing', f
     $vc->receiveStreams = [];
 
     $ssrc = 2001;
-    $vc->speakingStatus = Collection::for(Speaking::class, 'ssrc');
-    $vc->speakingStatus->pushItem(makeSpeakingExt($ssrc, 'user-2001'));
+    $col = Collection::for(Speaking::class, 'ssrc');
+    $col->pushItem(makeSpeakingExt($ssrc, 'user-2001'));
+    setVcSpeakingStatusExt($vc, $col);
 
     $writeCount = 0;
     $fakeDecoder = makeFakeDecoderExtTracking(writable: true, writeCount: $writeCount);
@@ -126,8 +128,9 @@ it('handleAudioData() silently drops frames shorter than 8 bytes without throwin
     $vc->receiveStreams = [];
 
     $ssrc = 2002;
-    $vc->speakingStatus = Collection::for(Speaking::class, 'ssrc');
-    $vc->speakingStatus->pushItem(makeSpeakingExt($ssrc, 'user-2002'));
+    $col = Collection::for(Speaking::class, 'ssrc');
+    $col->pushItem(makeSpeakingExt($ssrc, 'user-2002'));
+    setVcSpeakingStatusExt($vc, $col);
 
     $writeCount = 0;
     $fakeDecoder = makeFakeDecoderExtTracking(writable: true, writeCount: $writeCount);
@@ -162,8 +165,9 @@ it('when opusdecoder is null (OpusFfi unavailable) valid frames are not written 
     $vc->opusdecoder    = null; // explicitly no FFI decoder available
 
     $ssrc = 3001;
-    $vc->speakingStatus = Collection::for(Speaking::class, 'ssrc');
-    $vc->speakingStatus->pushItem(makeSpeakingExt($ssrc, 'user-3001'));
+    $col = Collection::for(Speaking::class, 'ssrc');
+    $col->pushItem(makeSpeakingExt($ssrc, 'user-3001'));
+    setVcSpeakingStatusExt($vc, $col);
 
     $writeCount = 0;
     $fakeDecoder = makeFakeDecoderExtTracking(writable: true, writeCount: $writeCount);
@@ -205,8 +209,9 @@ it('when opusdecoder returns empty PCM the frame is discarded without writing to
     $vc->opusdecoder = $stubDecoder;
 
     $ssrc = 3002;
-    $vc->speakingStatus = Collection::for(Speaking::class, 'ssrc');
-    $vc->speakingStatus->pushItem(makeSpeakingExt($ssrc, 'user-3002'));
+    $col = Collection::for(Speaking::class, 'ssrc');
+    $col->pushItem(makeSpeakingExt($ssrc, 'user-3002'));
+    setVcSpeakingStatusExt($vc, $col);
 
     $writeCount = 0;
     $fakeDecoder = makeFakeDecoderExtTracking(writable: true, writeCount: $writeCount);
@@ -230,8 +235,9 @@ it('removeDecoder() removes the decoder, receive stream and SSRC map entry for t
     [$vc] = makeVcForRecordExt();
 
     $ssrc = 4001;
-    $vc->speakingStatus = Collection::for(Speaking::class, 'ssrc');
-    $vc->speakingStatus->pushItem(makeSpeakingExt($ssrc, 'user-leaving'));
+    $col = Collection::for(Speaking::class, 'ssrc');
+    $col->pushItem(makeSpeakingExt($ssrc, 'user-leaving'));
+    setVcSpeakingStatusExt($vc, $col);
 
     $closed = false;
     $fakeDecoder = makeFakeDecoderExtWithClose($closed);
@@ -246,7 +252,7 @@ it('removeDecoder() removes the decoder, receive stream and SSRC map entry for t
     $removeDecoder = new \ReflectionMethod(VoiceClient::class, 'removeDecoder');
     $removeDecoder->setAccessible(true);
 
-    $ss = $vc->speakingStatus->get('ssrc', $ssrc);
+    $ss = getVcSpeakingStatusExt($vc)->get('ssrc', $ssrc);
     $removeDecoder->invoke($vc, $ss);
 
     expect($vc->voiceDecoders)->not->toHaveKey($ssrc)
@@ -259,15 +265,16 @@ it('removeDecoder() is a no-op when the SSRC has no associated decoder', functio
     [$vc] = makeVcForRecordExt();
 
     $ssrc = 4002;
-    $vc->speakingStatus = Collection::for(Speaking::class, 'ssrc');
-    $vc->speakingStatus->pushItem(makeSpeakingExt($ssrc, 'user-unknown'));
+    $col = Collection::for(Speaking::class, 'ssrc');
+    $col->pushItem(makeSpeakingExt($ssrc, 'user-unknown'));
+    setVcSpeakingStatusExt($vc, $col);
     $vc->voiceDecoders  = []; // no decoder for this SSRC
     $vc->receiveStreams  = [];
 
     $removeDecoder = new \ReflectionMethod(VoiceClient::class, 'removeDecoder');
     $removeDecoder->setAccessible(true);
 
-    $ss = $vc->speakingStatus->get('ssrc', $ssrc);
+    $ss = getVcSpeakingStatusExt($vc)->get('ssrc', $ssrc);
     // Must not throw even though the decoder is absent
     expect(fn () => $removeDecoder->invoke($vc, $ss))->not->toThrow(\Throwable::class);
 });
@@ -288,7 +295,7 @@ it('stopRecording() calls close() on every active decoder before clearing voiceD
 
     $vc->voiceDecoders  = [1 => $fakeDecoderA, 2 => $fakeDecoderB];
     $vc->receiveStreams  = [];
-    $vc->speakingStatus = Collection::for(Speaking::class, 'ssrc');
+    setVcSpeakingStatusExt($vc, Collection::for(Speaking::class, 'ssrc'));
 
     $ssrcMapProp = new \ReflectionProperty(VoiceClient::class, 'ssrcToUserId');
     $ssrcMapProp->setAccessible(true);
@@ -348,13 +355,14 @@ it('createDecoder() refuses to add a new decoder once MAX_DECODERS (25) is reach
     }
     $vc->voiceDecoders  = $decoders;
     $vc->receiveStreams  = [];
-    $vc->speakingStatus = Collection::for(Speaking::class, 'ssrc');
-    $vc->speakingStatus->pushItem(makeSpeakingExt(9999, 'user-overflow'));
+    $col = Collection::for(Speaking::class, 'ssrc');
+    $col->pushItem(makeSpeakingExt(9999, 'user-overflow'));
+    setVcSpeakingStatusExt($vc, $col);
 
     $createDecoder = new \ReflectionMethod(VoiceClient::class, 'createDecoder');
     $createDecoder->setAccessible(true);
 
-    $ss = $vc->speakingStatus->get('ssrc', 9999);
+    $ss = getVcSpeakingStatusExt($vc)->get('ssrc', 9999);
     $createDecoder->invoke($vc, $ss);
 
     // Still 25; the 26th was refused
@@ -371,6 +379,21 @@ function makeVcForRecordExt(): array
     initVcForReceiveExt($vc);
 
     return [$vc];
+}
+
+function setVcSpeakingStatusExt(VoiceClient $vc, mixed $value): void
+{
+    $prop = new \ReflectionProperty(VoiceClient::class, 'speakingStatus');
+    $prop->setAccessible(true);
+    $prop->setValue($vc, $value);
+}
+
+function getVcSpeakingStatusExt(VoiceClient $vc): mixed
+{
+    $prop = new \ReflectionProperty(VoiceClient::class, 'speakingStatus');
+    $prop->setAccessible(true);
+
+    return $prop->getValue($vc);
 }
 
 function initVcForReceiveExt(VoiceClient $vc): void
