@@ -115,7 +115,7 @@ All library exceptions implement the [`VoiceException`](src/Discord/Voice/Except
 use Discord\Voice\Exceptions\VoiceException;
 
 try {
-    $manager->joinChannel($channel, $discord, $voiceSessions);
+    $manager->joinChannel($channel);
 } catch (VoiceException $e) {
     echo "Voice error: " . $e->getMessage();
 }

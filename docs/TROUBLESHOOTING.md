@@ -26,7 +26,7 @@ All library exceptions implement the `VoiceException` marker interface. You can 
 use Discord\Voice\Exceptions\VoiceException;
 
 try {
-    $manager->joinChannel($channel, $discord, $voiceSessions)->then(function ($client) {
+    $manager->joinChannel($channel)->then(function ($client) {
         // ...
     });
 } catch (VoiceException $e) {
