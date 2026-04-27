@@ -260,7 +260,7 @@ final class WS
         if (! $this->sentLoginFrame) {
             $this->handleSendingOfLoginFrame();
             $this->sentLoginFrame = true;
-        } elseif (isset($this->data['token'], $this->discord->voice_sessions[$this->vc->channel->guild_id])) {
+        } elseif ($this->vc->reconnecting && isset($this->data['token'], $this->discord->voice_sessions[$this->vc->channel->guild_id])) {
             $this->handleResume();
         } else {
             $this->discord->getLogger()->debug('existing voice session or data not found, re-sending identify', ['guild_id' => $this->vc->channel->guild_id]);
@@ -1183,8 +1183,8 @@ final class WS
             return;
         }
 
-        // If we have a valid session to resume, prefer Resume over Identify.
-        if (isset($this->data['token'], $this->discord->voice_sessions[$this->vc->channel->guild_id])) {
+        // Only a reconnect may resume; initial connects already have the VOICE_STATE_UPDATE session id.
+        if ($this->vc->reconnecting && isset($this->data['token'], $this->discord->voice_sessions[$this->vc->channel->guild_id])) {
             $this->handleResume();
             $this->sentLoginFrame = true;
             $this->vc->sentLoginFrame = true;

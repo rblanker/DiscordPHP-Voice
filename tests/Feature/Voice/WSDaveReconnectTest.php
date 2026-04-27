@@ -48,7 +48,27 @@ it('identify payload includes max_dave_protocol_version', function (): void {
     $jsonPayloads = array_values(array_filter($sentPayloads, fn (string $p) => str_starts_with($p, '{')));
     expect($jsonPayloads)->toHaveCount(1);
     $decoded = json_decode($jsonPayloads[0], true, flags: JSON_THROW_ON_ERROR);
+    expect($decoded['op'])->toBe(Op::VOICE_IDENTIFY);
+    expect($decoded['d']['session_id'])->toBe('session-1');
     expect($decoded['d'])->toHaveKey('max_dave_protocol_version');
+});
+
+it('reconnecting login frame sends resume with seq_ack', function (): void {
+    $sentPayloads = [];
+    $ws = makeWsForReconnectTest($this, function (string $payload) use (&$sentPayloads): void {
+        $sentPayloads[] = $payload;
+    });
+
+    $ws->vc->reconnecting = true;
+    invokeReconnectWsMethod($ws, 'recordGatewaySequence', [55]);
+
+    invokeReconnectWsMethod($ws, 'handleSendingOfLoginFrame');
+
+    $jsonPayloads = array_values(array_filter($sentPayloads, fn (string $p) => str_starts_with($p, '{')));
+    expect($jsonPayloads)->toHaveCount(1);
+    $decoded = json_decode($jsonPayloads[0], true, flags: JSON_THROW_ON_ERROR);
+    expect($decoded['op'])->toBe(Op::VOICE_RESUME);
+    expect($decoded['d']['seq_ack'])->toBe(55);
 });
 
 it('identify is only sent once due to sentLoginFrame guard', function (): void {
