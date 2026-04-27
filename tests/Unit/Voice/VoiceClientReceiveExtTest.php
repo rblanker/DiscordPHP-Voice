@@ -19,6 +19,7 @@ use Discord\Discord;
 use Discord\Helpers\Collection;
 use Discord\Voice\Client\Packet;
 use Discord\Voice\Processes\OpusDecoderInterface;
+use Discord\Voice\Processes\OpusFfi;
 use Discord\Voice\RecieveStream;
 use Discord\Voice\ReceiveStream;
 use Discord\Voice\Speaking;
@@ -367,6 +368,158 @@ it('createDecoder() refuses to add a new decoder once MAX_DECODERS (25) is reach
 
     // Still 25; the 26th was refused
     expect($vc->voiceDecoders)->toHaveCount(25);
+});
+
+// ---------------------------------------------------------------------------
+// 7. FFI decoder path: writePCM() triggers channel-pcm; decoder stdin also written
+// ---------------------------------------------------------------------------
+
+it('handleAudioData() with FFI decoder emits channel-pcm and writes PCM to decoder stdin', function (): void {
+    $vc = (new \ReflectionMethod(\PHPUnit\Framework\TestCase::class, 'getMockBuilder'))
+        ->invoke($this, VoiceClient::class)
+        ->disableOriginalConstructor()
+        ->onlyMethods(['createDecoder'])
+        ->getMock();
+
+    initVcForReceiveExt($vc);
+    $vc->record();
+    $vc->voiceDecoders = [];
+    $vc->receiveStreams = [];
+
+    $fakePcm = str_repeat("\x7F\x00", 960);
+    $stubDecoder = new class($fakePcm) implements OpusDecoderInterface {
+        public function __construct(private string $pcm) {}
+
+        public function decode($data, int $channels = 2, int $audioRate = 48000): string
+        {
+            return $this->pcm;
+        }
+    };
+    $vc->opusdecoder = $stubDecoder;
+
+    $ssrc = 6001;
+    $col = Collection::for(Speaking::class, 'ssrc');
+    $col->pushItem(makeSpeakingExt($ssrc, 'user-6001'));
+    setVcSpeakingStatusExt($vc, $col);
+
+    $stdinLog = new \stdClass();
+    $stdinLog->writes = [];
+    $fakeDecoder = new class($stdinLog) {
+        public object $stdin;
+
+        public function __construct(\stdClass $log)
+        {
+            $this->stdin = new class($log) {
+                public function __construct(private \stdClass $log) {}
+
+                public function isWritable(): bool
+                {
+                    return true;
+                }
+
+                public function write(string $data): bool
+                {
+                    $this->log->writes[] = $data;
+
+                    return true;
+                }
+            };
+        }
+    };
+
+    $vc->expects($this->once())
+        ->method('createDecoder')
+        ->willReturnCallback(function ($ss) use ($vc, $fakeDecoder): void {
+            $vc->voiceDecoders[$ss->ssrc] = $fakeDecoder;
+        });
+
+    $pcmEvents = [];
+    $vc->on('channel-pcm', function ($data) use (&$pcmEvents): void {
+        $pcmEvents[] = $data;
+    });
+
+    $packet = makeReceivePacketExt($ssrc, str_repeat("\xAB", 32));
+    $vc->handleAudioData($packet);
+
+    expect($pcmEvents)->toBe([$fakePcm], 'channel-pcm must carry decoded PCM bytes')
+        ->and($stdinLog->writes)->toBe([$fakePcm], 'decoder stdin must receive the same PCM for Opus re-encoding');
+});
+
+// ---------------------------------------------------------------------------
+// 7b. Non-FFI else path: writeOpus() triggers channel-opus; decoder stdin NOT written
+// ---------------------------------------------------------------------------
+
+it('handleAudioData() without FFI decoder emits channel-opus from the raw Opus frame', function (): void {
+    $vc = (new \ReflectionMethod(\PHPUnit\Framework\TestCase::class, 'getMockBuilder'))
+        ->invoke($this, VoiceClient::class)
+        ->disableOriginalConstructor()
+        ->onlyMethods(['createDecoder'])
+        ->getMock();
+
+    initVcForReceiveExt($vc);
+    $vc->record();
+    $vc->voiceDecoders = [];
+    $vc->receiveStreams = [];
+    $vc->opusdecoder = null;
+
+    $ssrc = 6002;
+    $col = Collection::for(Speaking::class, 'ssrc');
+    $col->pushItem(makeSpeakingExt($ssrc, 'user-6002'));
+    setVcSpeakingStatusExt($vc, $col);
+
+    $writeCount = 0;
+    $fakeDecoder = makeFakeDecoderExtTracking(writable: true, writeCount: $writeCount);
+
+    $vc->expects($this->once())
+        ->method('createDecoder')
+        ->willReturnCallback(function ($ss) use ($vc, $fakeDecoder): void {
+            $vc->voiceDecoders[$ss->ssrc] = $fakeDecoder;
+        });
+
+    $opusEvents = [];
+    $vc->on('channel-opus', function ($data) use (&$opusEvents): void {
+        $opusEvents[] = $data;
+    });
+
+    $opusFrame = str_repeat("\xCC", 32);
+    $packet = makeReceivePacketExt($ssrc, $opusFrame);
+    $vc->handleAudioData($packet);
+
+    expect($opusEvents)->toBe([$opusFrame], 'channel-opus must carry the raw Opus frame when no FFI decoder is set')
+        ->and($writeCount)->toBe(0, 'decoder stdin must not be written in the non-FFI else path');
+});
+
+// ---------------------------------------------------------------------------
+// 8. record() auto-initialisation of OpusFfi
+// ---------------------------------------------------------------------------
+
+it('record() does not override an already-configured opusdecoder', function (): void {
+    [$vc] = makeVcForRecordExt();
+
+    $stubDecoder = new class implements OpusDecoderInterface {
+        public function decode($data, int $channels = 2, int $audioRate = 48000): string
+        {
+            return '';
+        }
+    };
+    $vc->opusdecoder = $stubDecoder;
+
+    $vc->record();
+
+    expect($vc->opusdecoder)->toBe($stubDecoder, 'record() must not replace a pre-configured opusdecoder');
+});
+
+it('record() auto-initialises OpusFfi when opusdecoder is null and libopus is available', function (): void {
+    if (! OpusFfi::isAvailable()) {
+        $this->markTestSkipped('Requires libopus to be available.');
+    }
+
+    [$vc] = makeVcForRecordExt();
+    $vc->opusdecoder = null;
+
+    $vc->record();
+
+    expect($vc->opusdecoder)->toBeInstanceOf(OpusFfi::class);
 });
 
 // ---------------------------------------------------------------------------

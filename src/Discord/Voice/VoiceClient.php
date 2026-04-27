@@ -1347,7 +1347,14 @@ class VoiceClient extends EventEmitter
                 return; // no audio data to write
             }
 
+            // Emit PCM for channel-pcm event (the main recording output path).
+            $this->receiveStreams[$ss->ssrc]->writePCM($data);
+
+            // Also feed PCM to the OGG encoder process for channel-opus.
             $decoder->stdin->write($data);
+        } else {
+            // No FFI Opus decoder — pass raw Opus frames for channel-opus only.
+            $this->receiveStreams[$ss->ssrc]->writeOpus($voicePacket->decryptedAudio);
         }
     }
 
@@ -1511,6 +1518,13 @@ class VoiceClient extends EventEmitter
     {
         if ($this->shouldRecord) {
             throw new \RuntimeException('Already recording audio.');
+        }
+
+        // Auto-initialize the FFI Opus decoder if not already set.
+        // This enables the channel-pcm event output path without requiring
+        // callers to manually invoke setDecoder().
+        if ($this->opusdecoder === null && OpusFfi::isAvailable()) {
+            $this->opusdecoder = new OpusFfi();
         }
 
         $this->shouldRecord = true;
