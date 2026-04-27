@@ -59,6 +59,8 @@ final class State
     /** Consecutive proposal-processing failures for the current epoch. */
     public int $proposalFailureCount = 0;
 
+    public bool $keyPackageSent = false;
+
     public function __destruct()
     {
         $this->close();
@@ -233,6 +235,7 @@ final class State
         $this->encryptFailureCount = 0;
         $this->decryptFailureCount = 0;
         $this->proposalFailureCount = 0;
+        $this->keyPackageSent = false;
     }
 
     public function close(): void

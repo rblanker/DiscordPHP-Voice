@@ -282,6 +282,11 @@ final class WS
      */
     protected function sendDaveBinary(int $opcode, string $payload = ''): void
     {
+        $this->discord->logger->debug('sending DAVE binary packet', [
+            'opcode' => $opcode,
+            'payload_length' => strlen($payload),
+        ]);
+
         $this->socket->send(new Frame(
             (new BinaryFrame(null, $opcode, $payload))->toClientPayload(),
             true,
@@ -363,7 +368,9 @@ final class WS
 
         $protocolVersion = $this->resolveDaveProtocolVersion($this->extractProtocolVersion($data->d));
         if ($protocolVersion > 0) {
-            $this->initializeDaveRuntimeState($protocolVersion);
+            if ($this->initializeDaveRuntimeState($protocolVersion)) {
+                $this->sendDaveKeyPackage();
+            }
         } else {
             $this->daveState->resetProtocolState();
             $this->daveState->setProtocolVersion(0);
@@ -628,6 +635,8 @@ final class WS
                 if (! DaveRuntime::setExternalSender($this->daveState->session, $data->payload)) {
                     $this->discord->logger->error('Failed to set DAVE MLS external sender');
                 }
+
+                $this->sendDaveKeyPackage();
             }
         }
     }
@@ -1024,7 +1033,7 @@ final class WS
 
     private function sendDaveKeyPackage(): void
     {
-        if ($this->daveState->session === null) {
+        if ($this->daveState->session === null || $this->daveState->keyPackageSent) {
             return;
         }
 
@@ -1036,6 +1045,7 @@ final class WS
         }
 
         $this->sendDaveBinary(Op::VOICE_DAVE_MLS_KEY_PACKAGE, $keyPackage);
+        $this->daveState->keyPackageSent = true;
     }
 
     private function sendDaveInvalidCommitWelcome(): void

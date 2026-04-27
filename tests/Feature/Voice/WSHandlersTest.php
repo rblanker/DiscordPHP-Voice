@@ -19,7 +19,10 @@ use Discord\Discord;
 use Discord\Factory\SocketFactory;
 use Discord\Voice\Client;
 use Discord\Voice\Client\WS;
+use Discord\Voice\Dave\BinaryFrame;
+use Discord\Voice\Dave\EncryptorHandle;
 use Discord\Voice\Dave\Runtime;
+use Discord\Voice\Dave\SessionHandle;
 use Discord\Voice\Dave\State;
 use Discord\Voice\Speaking;
 use Discord\WebSockets\Op;
@@ -273,6 +276,46 @@ it('handleSessionDescription resets DAVE protocol state when dave_protocol_versi
         ->and($state->passthroughMode)->toBeTrue();
 });
 
+it('handleSessionDescription sends a DAVE key package when DAVE is enabled', function (): void {
+    $sentPayloads = [];
+    $ws = makeWsForHandlersTest($this, $sentPayloads);
+    $ws->vc->deaf = true;
+    $ws->vc->reconnecting = false;
+
+    $state = getHandlersDaveState($ws);
+    $state->replaceSession(new SessionHandle(new \stdClass()));
+    $state->replaceEncryptor(new EncryptorHandle(new \stdClass()));
+
+    Runtime::configureCallbacks(
+        keyPackageCallback: fn (SessionHandle $session): ?string => 'key-package'
+    );
+
+    $sd = new class() {
+        public string $mode = 'aead_aes256_gcm_rtpsize';
+        public string $secret_key = 'k';
+
+        public function __debugInfo(): array
+        {
+            return [];
+        }
+    };
+    setHandlersFactoryReturn($ws, $sd);
+
+    invokeHandlersMethod($ws, 'handleSessionDescription', [new Payload(Op::VOICE_SESSION_DESCRIPTION, [
+        'mode' => 'aead_aes256_gcm_rtpsize',
+        'secret_key' => array_fill(0, 32, 1),
+        'dave_protocol_version' => 1,
+    ])]);
+
+    expect($sentPayloads)->not->toBeEmpty();
+    $frame = BinaryFrame::fromClientPayload($sentPayloads[0]);
+
+    expect($frame)->not->toBeNull()
+        ->and($frame?->opcode)->toBe(Op::VOICE_DAVE_MLS_KEY_PACKAGE)
+        ->and($frame?->payload)->toBe('key-package')
+        ->and($state->keyPackageSent)->toBeTrue();
+});
+
 it('handleSessionDescription emits resumed (not ready) when the voice client is reconnecting', function (): void {
     $sentPayloads = [];
     $ws = makeWsForHandlersTest($this, $sentPayloads);
@@ -372,8 +415,10 @@ function makeWsForHandlersTest(TestCase $test, array &$sentPayloads): WS
         ->disableOriginalConstructor()
         ->onlyMethods(['send', 'close'])
         ->getMock();
-    $socket->method('send')->willReturnCallback(function (string $payload) use (&$sentPayloads): void {
-        $sentPayloads[] = $payload;
+    $socket->method('send')->willReturnCallback(function (mixed $payload) use (&$sentPayloads): void {
+        $sentPayloads[] = $payload instanceof \Ratchet\RFC6455\Messaging\Frame
+            ? $payload->getPayload()
+            : $payload;
     });
 
     $ws->vc = $vc;

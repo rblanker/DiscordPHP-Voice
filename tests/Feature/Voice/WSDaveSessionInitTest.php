@@ -18,6 +18,7 @@ namespace Discord\Tests\Feature\Voice;
 use Discord\Discord;
 use Discord\Voice\Client\WS;
 use Discord\Voice\Dave\BinaryFrame;
+use Discord\Voice\Dave\EncryptorHandle;
 use Discord\Voice\Dave\Runtime;
 use Discord\Voice\Dave\SessionHandle;
 use Discord\Voice\Dave\State;
@@ -239,6 +240,30 @@ it('handleDaveMlsExternalSender stores external sender bytes from BinaryFrame pa
 
     $state = getSessionInitDaveState($ws);
     expect($state->externalSenderPackage)->toBe('sender-key-bytes');
+});
+
+it('handleDaveMlsExternalSender sends pending key package when session is ready', function (): void {
+    $sentPayloads = [];
+    $ws = makeWsForSessionInitTest($this, $sentPayloads);
+
+    $state = getSessionInitDaveState($ws);
+    $state->replaceSession(new SessionHandle(new \stdClass()));
+    $state->replaceEncryptor(new EncryptorHandle(new \stdClass()));
+
+    Runtime::configureCallbacks(
+        keyPackageCallback: fn (SessionHandle $session): ?string => 'key-package'
+    );
+
+    $frame = new BinaryFrame(1, Op::VOICE_DAVE_MLS_EXTERNAL_SENDER, 'sender-key-bytes');
+    invokeSessionInitMethod($ws, 'handleDaveMlsExternalSender', [$frame]);
+
+    expect($sentPayloads)->not->toBeEmpty();
+    $sentFrame = BinaryFrame::fromClientPayload($sentPayloads[0]);
+
+    expect($sentFrame)->not->toBeNull()
+        ->and($sentFrame?->opcode)->toBe(Op::VOICE_DAVE_MLS_KEY_PACKAGE)
+        ->and($sentFrame?->payload)->toBe('key-package')
+        ->and($state->keyPackageSent)->toBeTrue();
 });
 
 it('handleDaveMlsExternalSender stores empty string payload from BinaryFrame', function (): void {

@@ -76,6 +76,11 @@ CDEF;
      */
     protected static $createSessionCallback = null;
 
+    /**
+     * @var null|callable(SessionHandle): ?string
+     */
+    protected static $keyPackageCallback = null;
+
     protected static ?bool $availabilityOverride = null;
 
     public static function isAvailable(): bool
@@ -128,6 +133,7 @@ CDEF;
         self::$processCommitCallback = null;
         self::$processWelcomeCallback = null;
         self::$createSessionCallback = null;
+        self::$keyPackageCallback = null;
         self::$availabilityOverride = null;
     }
 
@@ -138,6 +144,7 @@ CDEF;
      * @param null|callable(?SessionHandle, string): ?array      $processCommitCallback
      * @param null|callable(?SessionHandle, string, array): bool $processWelcomeCallback
      * @param null|callable(?string): ?SessionHandle             $createSessionCallback
+     * @param null|callable(SessionHandle): ?string              $keyPackageCallback
      */
     public static function configureCallbacks(
         ?callable $frameEncryptor = null,
@@ -146,7 +153,8 @@ CDEF;
         ?callable $processCommitCallback = null,
         ?callable $processWelcomeCallback = null,
         ?callable $createSessionCallback = null,
-        ?bool $availabilityOverride = null
+        ?bool $availabilityOverride = null,
+        ?callable $keyPackageCallback = null
     ): void {
         self::$frameEncryptor = $frameEncryptor;
         self::$frameDecryptor = $frameDecryptor;
@@ -155,6 +163,7 @@ CDEF;
         self::$processWelcomeCallback = $processWelcomeCallback;
         self::$createSessionCallback = $createSessionCallback;
         self::$availabilityOverride = $availabilityOverride;
+        self::$keyPackageCallback = $keyPackageCallback;
     }
 
     public static function encryptMediaFrame(string $frame, int $protocolVersion): ?string
@@ -450,6 +459,10 @@ CDEF;
 
     public static function getMarshalledKeyPackage(SessionHandle $session): ?string
     {
+        if (is_callable(self::$keyPackageCallback)) {
+            return (self::$keyPackageCallback)($session);
+        }
+
         $ffi = self::ffi();
         if (! $ffi instanceof FFI) {
             return null;
