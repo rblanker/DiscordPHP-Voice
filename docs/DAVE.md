@@ -18,6 +18,8 @@ For the authoritative protocol specification, see the [DAVE Protocol Whitepaper]
   - [Error Recovery](#error-recovery)
 - [Media Frame Encryption Pipeline](#media-frame-encryption-pipeline)
 - [DAVE State Machine](#dave-state-machine)
+- [Internal Flow](#internal-flow)
+  - [Media encryption/decryption](#media-encryptiondecryption)
 - [Voice Gateway DAVE Opcodes](#voice-gateway-dave-opcodes)
 
 ---
@@ -421,6 +423,129 @@ stateDiagram-v2
         note right of Encrypting: Drops frame on failure<br/>to preserve E2EE integrity
     }
 ```
+
+---
+
+## Internal Flow
+
+This section describes each DAVE opcode handler in `Client\WS` at the code level — where state is mutated, what is sent over the wire, and how the transition-readiness check gates E2EE activation.
+
+### 1. Session description received (Op 4)
+
+`handleSessionDescription()` extracts `dave_protocol_version` and calls `initializeDaveRuntimeState()`, which:
+
+1. Creates (or resets) a `SessionHandle` via `DaveRuntime::createSession()` and stores it in `State::$session`.
+2. Creates a fresh `EncryptorHandle` and stores it in `State::$encryptor`.
+3. Calls `DaveRuntime::initializeSession()` with `selfUserId` and the negotiated `groupId`.
+4. Applies the stored `externalSenderPackage` to the session if one has already arrived via Op 25.
+5. Sends Op 26 (MLS Key Package) as a binary WebSocket frame via `sendDaveKeyPackage()`.
+
+`passthroughMode` stays `true` until the first successful `executeTransition()`.
+
+### 2. Prepare epoch (Op 24)
+
+`handleDavePrepareEpoch()` reads `epoch`, optional `transition_id`, and `protocol_version` from the JSON payload:
+
+1. Calls `State::prepareEpoch($epoch)` to record the current epoch number.
+2. If a `transition_id` is present, calls `State::prepareTransition()` to record it; otherwise updates `latestPreparedTransitionVersion`.
+3. If `protocol_version > 0`, calls `initializeDaveRuntimeState()` (with `resetState=true` when `epoch === 1`).
+4. If epoch is 1 (a new MLS group is being formed), sends Op 26 via `sendDaveKeyPackage()`.
+
+A session initialization failure here is fatal: the socket is closed immediately (fail-closed security policy).
+
+### 3. External sender (Op 25)
+
+`handleDaveMlsExternalSender()` receives a binary frame containing the gateway's MLS external sender credential:
+
+1. Calls `State::recordExternalSender()` to persist the credential for replay inside `initializeDaveRuntimeState()`.
+2. If a `SessionHandle` is already present, calls `DaveRuntime::setExternalSender()` immediately.
+3. Calls `sendDaveKeyPackage()` — if the key package was not yet sent, this emits Op 26.
+
+Op 25 may arrive before, during, or after the Op 4 session setup; storing the credential and replaying it inside init makes the ordering safe.
+
+### 4. Proposals (Op 27)
+
+`handleDaveMlsProposals()` receives a binary frame with MLS Add/Remove proposals from the external sender:
+
+1. Calls `DaveRuntime::buildMlsCommitWelcomeWithSession()` to let libdave build a commit (and optional welcome messages) from the proposals.
+2. On success, sends Op 28 (MLS Commit Welcome) as a binary WebSocket frame.
+3. On failure, increments `State::$proposalFailureCount`. **Three consecutive failures trigger a socket close** so the client reconnects and obtains a fresh DAVE epoch.
+
+### 5. Commit/welcome (Op 28)
+
+`handleDaveMlsCommitWelcome()` receives the winning commit/welcome from the gateway:
+
+1. Calls `DaveRuntime::processCommit()` on the stored session. On success (and not ignored), calls `prepareDaveMediaTransition()` then `completeDaveMediaTransition()`.
+2. If `processCommit` fails, falls through to `DaveRuntime::processWelcome()` — the path taken by the client that is joining an existing group.
+3. On double failure, calls `handleInvalidDaveTransition()` to begin error recovery (Op 31 + session reset + fresh Op 26).
+
+### 6. Announce commit transition (Op 29)
+
+`handleDaveMlsAnnounceCommitTransition()` is the server-broadcast path for existing group members:
+
+1. `TransitionPayload::parse()` extracts the 2-byte big-endian `transition_id` from bytes 0–1 of the payload; the remainder is the raw MLS commit.
+2. Calls `DaveRuntime::processCommit()`.
+3. Calls `prepareDaveMediaTransition()` then `completeDaveMediaTransition()`, which branches on `transition_id`:
+   - **Zero `transition_id`** — executes the media transition immediately and locally without a gateway round-trip.
+   - **Non-zero `transition_id`** — sends Op 23 (Transition Ready) and waits for the gateway to confirm with Op 22 (Execute Transition).
+
+### 7. Execute transition (Op 22)
+
+`handleDaveExecuteTransition()` → `executeDaveMediaTransition($transitionId)`:
+
+1. Verifies the transition ID matches `State::$pendingTransitionId`; mismatches are silently ignored.
+2. **Protocol version 0 (downgrade):** calls `DaveRuntime::resetSession()`, then `State::resetProtocolState()` + `State::setProtocolVersion(0)` — restoring full passthrough.
+3. **Protocol version > 0:** calls `applySelfDaveEncryptor()` to bind the new MLS epoch's key ratchet to `State::$encryptor`, then `State::executeTransition()` which sets `passthroughMode = false`.
+
+`passthroughMode = false` is the gate that activates DAVE E2EE for both outbound and inbound frames.
+
+### 8. Remote user decryptor setup
+
+`prepareRemoteDaveDecryptor($userId, $protocolVersion)` is called inside `prepareDaveMediaTransition()` for each recognized remote user:
+
+1. Obtains or creates a `DecryptorHandle` for the user.
+2. Calls `DaveRuntime::getKeyRatchet()` to fetch the per-sender ratchet for the new epoch from libdave.
+3. **`configureDecryptorPassthrough(true)`** — enables a passthrough grace period so in-flight frames encrypted with the old epoch's key are not dropped during the transition.
+4. **`configureDecryptorKeyRatchet()`** — installs the new epoch's key ratchet into the decryptor.
+5. **`configureDecryptorPassthrough(false)`** — closes the grace window; the decryptor now enforces E2EE decryption only.
+
+The three-step passthrough sequence prevents audio glitches at epoch boundaries.
+
+---
+
+## Media encryption/decryption
+
+### Outbound frame path
+
+```
+Packet::encrypt()
+  │
+  ├─ outboundFrameEncryptor callback (injected by VoiceClient)
+  │    └─ if passthroughMode = false:
+  │         VoiceClient::encryptDaveFrame()
+  │           └─ DaveRuntime::encryptWithEncryptor()   [libdave AES-128-GCM]
+  │
+  └─ sodium_crypto_aead_aes256gcm_encrypt()            [transport AES-256-GCM]
+```
+
+If DAVE encryption fails while `passthroughMode = false`, the frame is **dropped** — never sent to Discord. This preserves E2EE integrity and prevents silent fallback to plaintext Opus.
+
+### Inbound frame path
+
+```
+UDP receives raw packet
+  │
+  Packet::decrypt()
+    1. sodium_crypto_aead_aes256gcm_decrypt()          [transport AES-256-GCM]
+    2. RtpHeader::stripExtensionPayload()              [remove RTP header extensions]
+    3. inboundFrameDecryptor callback (injected by VoiceClient)
+         └─ if DAVE active (passthroughMode = false):
+              VoiceClient::decryptDaveFrame()
+                ├─ resolve SSRC → userId → DecryptorHandle
+                └─ DaveRuntime::decryptWithDecryptor()  [libdave AES-128-GCM]
+```
+
+RTP header extensions are stripped **after** transport decryption and **before** DAVE frame decryption. This keeps Discord's RTP extension bytes outside the DAVE-encrypted media frame while preserving normal RTP authentication.
 
 ---
 
