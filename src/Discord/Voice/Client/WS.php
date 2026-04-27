@@ -23,6 +23,7 @@ use Discord\Voice\Client;
 use Discord\Voice\Dave\BinaryFrame;
 use Discord\Voice\Dave\Runtime as DaveRuntime;
 use Discord\Voice\Dave\State as DaveState;
+use Discord\Voice\Dave\TransitionPayload;
 use Discord\Voice\Exceptions\Libraries\LibDaveNotFoundException;
 use Discord\Voice\Flags;
 use Discord\Voice\Hello;
@@ -51,8 +52,6 @@ use React\Promise\PromiseInterface;
  */
 final class WS
 {
-    private const DAVE_TRANSITION_ID_UNPACK_FORMAT = 'ntransition_id';
-
     /**
      * The maximum DAVE protocol version supported.
      */
@@ -532,9 +531,8 @@ final class WS
 
     protected function handleDavePrepareTransition($data): void
     {
-        $this->discord->logger->debug('DAVE Prepare Transition', ['data' => $data]);
-
         $transitionId = (int) ($data->d['transition_id'] ?? 0);
+        $this->discord->logger->debug('DAVE: prepare transition', ['transition_id' => $transitionId]);
         $protocolVersion = $this->resolveDaveProtocolVersion((int) ($data->d['protocol_version'] ?? 0));
 
         $this->prepareDaveMediaTransition($transitionId, $protocolVersion);
@@ -543,8 +541,8 @@ final class WS
 
     protected function handleDaveExecuteTransition($data): void
     {
-        $this->discord->logger->debug('DAVE Execute Transition', ['data' => $data]);
         $transitionId = (int) ($data->d['transition_id'] ?? 0);
+        $this->discord->logger->debug('DAVE: execute transition', ['transition_id' => $transitionId]);
 
         $this->executeDaveMediaTransition($transitionId);
     }
@@ -558,9 +556,7 @@ final class WS
         $protocolVersion = $this->daveState->pendingProtocolVersion ?? $this->daveState->protocolVersion;
 
         if ($protocolVersion <= 0) {
-            $this->discord->logger->warning('DAVE protocol downgrading to v0 (passthrough); resetting session.', [
-                'previous_version' => $this->daveState->protocolVersion,
-            ]);
+            $this->discord->logger->warning("DAVE: protocol downgrading from v{$this->daveState->protocolVersion} to v0 (passthrough); resetting session.");
 
             if ($this->daveState->session !== null) {
                 DaveRuntime::resetSession($this->daveState->session);
@@ -574,7 +570,7 @@ final class WS
 
         if ($this->daveState->session !== null) {
             if (! DaveRuntime::setSessionProtocolVersion($this->daveState->session, $protocolVersion)) {
-                $this->discord->logger->error('Failed to set DAVE session protocol version', ['protocol_version' => $protocolVersion]);
+                $this->discord->logger->error('DAVE: failed to set session protocol version', ['protocol_version' => $protocolVersion]);
             }
         }
 
@@ -584,8 +580,8 @@ final class WS
 
     protected function handleDaveTransitionReady($data): void
     {
-        $this->discord->logger->debug('DAVE Transition Ready', ['data' => $data]);
         $transitionId = (int) ($data->d['transition_id'] ?? 0);
+        $this->discord->logger->debug('DAVE: transition ready', ['transition_id' => $transitionId]);
 
         if ($this->daveState->pendingTransitionId !== $transitionId) {
             return;
@@ -599,8 +595,8 @@ final class WS
 
     protected function handleDavePrepareEpoch($data): void
     {
-        $this->discord->logger->debug('DAVE Prepare Epoch', ['data' => $data]);
         $epoch = (int) ($data->d['epoch'] ?? 0);
+        $this->discord->logger->debug('DAVE: prepare epoch', ['epoch' => $epoch]);
         $protocolVersion = $this->resolveDaveProtocolVersion($this->extractProtocolVersion($data->d));
         $transitionId = isset($data->d['transition_id']) ? (int) $data->d['transition_id'] : null;
 
@@ -632,13 +628,13 @@ final class WS
 
     protected function handleDaveMlsExternalSender($data): void
     {
-        $this->discord->logger->debug('DAVE MLS External Sender', ['data' => $data]);
+        $this->discord->logger->debug('DAVE: MLS external sender');
         if ($data instanceof BinaryFrame) {
-            $this->daveState->externalSenderPackage = $data->payload;
+            $this->daveState->recordExternalSender($data->payload);
 
             if ($this->daveState->session !== null) {
                 if (! DaveRuntime::setExternalSender($this->daveState->session, $data->payload)) {
-                    $this->discord->logger->error('Failed to set DAVE MLS external sender');
+                    $this->discord->logger->error('DAVE: failed to set MLS external sender');
                 }
 
                 $this->sendDaveKeyPackage();
@@ -663,7 +659,7 @@ final class WS
      */
     protected function handleDaveMlsKeyPackage($data): void
     {
-        $this->discord->logger->debug('DAVE MLS Key Package received', ['data' => $data]);
+        $this->discord->logger->debug('DAVE: MLS key package received');
 
         if (! ($data instanceof BinaryFrame)) {
             return;
@@ -674,7 +670,7 @@ final class WS
 
     protected function handleDaveMlsProposals($data): void
     {
-        $this->discord->logger->debug('DAVE MLS Proposals', ['data' => $data]);
+        $this->discord->logger->debug('DAVE: MLS proposals');
 
         if (! ($data instanceof BinaryFrame)) {
             return;
@@ -699,7 +695,7 @@ final class WS
             // Discord to re-send the same stale proposals indefinitely.  Instead we
             // count consecutive failures and disconnect after 3 so the voice client
             // reconnects and obtains a fresh DAVE epoch from the gateway.
-            $this->daveState->proposalFailureCount++;
+            $this->daveState->incrementProposalFailures();
             $this->discord->logger->warning('DAVE: failed to build MLS commit from proposals', [
                 'consecutive_failures' => $this->daveState->proposalFailureCount,
                 'recognized_users' => $this->daveState->recognizedUsersIncludingSelf(),
@@ -715,19 +711,21 @@ final class WS
             return;
         }
 
-        $this->daveState->proposalFailureCount = 0;
+        $this->daveState->resetProposalFailures();
         $this->sendDaveBinary(Op::VOICE_DAVE_MLS_COMMIT_WELCOME, $payload);
     }
 
     protected function handleDaveMlsCommitWelcome($data): void
     {
-        $this->discord->logger->debug('DAVE MLS Commit Welcome', ['data' => $data]);
+        $this->discord->logger->debug('DAVE: MLS commit welcome');
 
         if (! ($data instanceof BinaryFrame) || $this->daveState->session === null) {
             return;
         }
 
-        [$transitionId, $commitWelcome] = $this->splitTransitionPayload($data->payload);
+        $tp = TransitionPayload::parse($data->payload);
+        $transitionId = $tp?->transitionId ?? 0;
+        $commitWelcome = $tp?->payload ?? '';
 
         $result = DaveRuntime::processCommit($this->daveState->session, $commitWelcome);
         if ($result !== null && ! ($result['failed'] ?? true) && ! ($result['ignored'] ?? false)) {
@@ -761,13 +759,15 @@ final class WS
 
     protected function handleDaveMlsAnnounceCommitTransition($data)
     {
-        $this->discord->logger->debug('DAVE MLS Announce Commit Transition', ['data' => $data]);
+        $this->discord->logger->debug('DAVE: MLS announce commit transition');
 
         if (! ($data instanceof BinaryFrame) || $this->daveState->session === null) {
             return;
         }
 
-        [$transitionId, $commit] = $this->splitTransitionPayload($data->payload);
+        $tp = TransitionPayload::parse($data->payload);
+        $transitionId = $tp?->transitionId ?? 0;
+        $commit = $tp?->payload ?? '';
         $result = DaveRuntime::processCommit($this->daveState->session, $commit);
 
         if ($result === null || ($result['failed'] ?? true)) {
@@ -789,13 +789,15 @@ final class WS
 
     protected function handleDaveMlsWelcome($data)
     {
-        $this->discord->logger->debug('DAVE MLS Welcome', ['data' => $data]);
+        $this->discord->logger->debug('DAVE: MLS welcome');
 
         if (! ($data instanceof BinaryFrame) || $this->daveState->session === null) {
             return;
         }
 
-        [$transitionId, $welcome] = $this->splitTransitionPayload($data->payload);
+        $tp = TransitionPayload::parse($data->payload);
+        $transitionId = $tp?->transitionId ?? 0;
+        $welcome = $tp?->payload ?? '';
         $joinedGroup = DaveRuntime::processWelcome(
             $this->daveState->session,
             $welcome,
@@ -817,9 +819,9 @@ final class WS
 
     protected function handleDaveMlsInvalidCommitWelcome($data)
     {
-        $this->discord->logger->warning('DAVE MLS Invalid Commit Welcome received; recovering MLS state.', ['data' => $data]);
+        $this->discord->logger->warning('DAVE: invalid MLS commit/welcome; recovering state.');
         $transitionId = $data instanceof BinaryFrame
-            ? $this->extractTransitionId($data->payload)
+            ? (TransitionPayload::parse($data->payload)?->transitionId ?? 0)
             : (int) ($data->d['transition_id'] ?? 0);
         $this->handleInvalidDaveTransition($transitionId, true);
     }
@@ -832,25 +834,6 @@ final class WS
         return (int) ($data['dave_protocol_version'] ?? $data['protocol_version'] ?? 0);
     }
 
-    private function extractTransitionId(string $payload): int
-    {
-        if (strlen($payload) < 2) {
-            return 0;
-        }
-
-        $header = unpack(self::DAVE_TRANSITION_ID_UNPACK_FORMAT, substr($payload, 0, 2));
-
-        return (int) ($header['transition_id'] ?? 0);
-    }
-
-    /**
-     * @return array{0:int,1:string}
-     */
-    private function splitTransitionPayload(string $payload): array
-    {
-        return [$this->extractTransitionId($payload), substr($payload, 2)];
-    }
-
     private function resolveDaveProtocolVersion(int $protocolVersion): int
     {
         if ($protocolVersion <= 0) {
@@ -859,10 +842,7 @@ final class WS
 
         // libdave availability is enforced in __construct(); this point is always reached with a loaded runtime.
         if ($protocolVersion > $this->maxDaveProtocolVersion) {
-            $this->discord->logger->warning('DAVE: server offered protocol version {offered} but max supported is {max}; clamping.', [
-                'offered' => $protocolVersion,
-                'max' => $this->maxDaveProtocolVersion,
-            ]);
+            $this->discord->logger->warning("DAVE: server offered protocol version {$protocolVersion} but max supported is {$this->maxDaveProtocolVersion}; clamping.");
         }
 
         return min($protocolVersion, $this->maxDaveProtocolVersion);
@@ -878,7 +858,7 @@ final class WS
         }
 
         if ($this->daveState->selfUserId === null || $this->daveState->groupId === null) {
-            $this->discord->logger->warning('Cannot initialize DAVE runtime without voice identity context.');
+            $this->discord->logger->warning('DAVE: cannot initialize without voice identity.');
 
             return false;
         }
@@ -950,7 +930,7 @@ final class WS
     private function completeDaveMediaTransition(int $transitionId): void
     {
         if ($transitionId === 0) {
-            $this->discord->logger->debug('DAVE zero transition executing immediately');
+            $this->discord->logger->debug('DAVE: zero transition, executing immediately');
             $this->executeDaveMediaTransition($transitionId);
 
             return;
@@ -1065,7 +1045,7 @@ final class WS
         }
 
         $this->sendDaveBinary(Op::VOICE_DAVE_MLS_KEY_PACKAGE, $keyPackage);
-        $this->daveState->keyPackageSent = true;
+        $this->daveState->markKeyPackageSent();
     }
 
     private function sendDaveInvalidCommitWelcome(): void
