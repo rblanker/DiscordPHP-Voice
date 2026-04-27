@@ -80,6 +80,25 @@ it('handleDavePrepareTransition handles missing protocol_version gracefully', fu
         ->and($decoded['d']['transition_id'])->toBe(3);
 });
 
+it('handleDavePrepareTransition executes transition zero locally without sending TRANSITION_READY', function (): void {
+    $sentPayloads = [];
+    $ws = makeWsForTransitionsTest($this, function (string $payload) use (&$sentPayloads): void {
+        $sentPayloads[] = $payload;
+    });
+
+    $state = getTransitionsDaveState($ws);
+    $state->prepareProtocolVersion(1);
+    expect($state->passthroughMode)->toBeTrue();
+
+    $data = (object) ['d' => ['transition_id' => 0, 'protocol_version' => 1]];
+    invokeTransitionsWsMethod($ws, 'handleDavePrepareTransition', [$data]);
+
+    expect($sentPayloads)->toBeEmpty()
+        ->and($state->pendingTransitionId)->toBeNull()
+        ->and($state->protocolVersion)->toBe(1)
+        ->and($state->passthroughMode)->toBeFalse();
+});
+
 // ---------------------------------------------------------------------------
 // handleDaveExecuteTransition
 // ---------------------------------------------------------------------------

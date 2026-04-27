@@ -538,7 +538,7 @@ final class WS
         $protocolVersion = $this->resolveDaveProtocolVersion((int) ($data->d['protocol_version'] ?? 0));
 
         $this->prepareDaveMediaTransition($transitionId, $protocolVersion);
-        $this->sendDaveTransitionReady($transitionId);
+        $this->completeDaveMediaTransition($transitionId);
     }
 
     protected function handleDaveExecuteTransition($data): void
@@ -546,6 +546,11 @@ final class WS
         $this->discord->logger->debug('DAVE Execute Transition', ['data' => $data]);
         $transitionId = (int) ($data->d['transition_id'] ?? 0);
 
+        $this->executeDaveMediaTransition($transitionId);
+    }
+
+    private function executeDaveMediaTransition(int $transitionId): void
+    {
         if ($this->daveState->pendingTransitionId !== $transitionId) {
             return;
         }
@@ -730,7 +735,7 @@ final class WS
                 $transitionId,
                 $this->daveState->pendingProtocolVersion ?? $this->daveState->protocolVersion
             );
-            $this->sendDaveTransitionReady($transitionId);
+            $this->completeDaveMediaTransition($transitionId);
 
             return;
         }
@@ -746,7 +751,7 @@ final class WS
                 $transitionId,
                 $this->daveState->pendingProtocolVersion ?? $this->daveState->protocolVersion
             );
-            $this->sendDaveTransitionReady($transitionId);
+            $this->completeDaveMediaTransition($transitionId);
 
             return;
         }
@@ -779,7 +784,7 @@ final class WS
             $transitionId,
             $this->daveState->pendingProtocolVersion ?? $this->daveState->protocolVersion
         );
-        $this->sendDaveTransitionReady($transitionId);
+        $this->completeDaveMediaTransition($transitionId);
     }
 
     protected function handleDaveMlsWelcome($data)
@@ -807,7 +812,7 @@ final class WS
             $transitionId,
             $this->daveState->pendingProtocolVersion ?? $this->daveState->protocolVersion
         );
-        $this->sendDaveTransitionReady($transitionId);
+        $this->completeDaveMediaTransition($transitionId);
     }
 
     protected function handleDaveMlsInvalidCommitWelcome($data)
@@ -940,10 +945,18 @@ final class WS
         foreach ($this->daveState->recognizedUsers() as $userId) {
             $this->prepareRemoteDaveDecryptor($userId, $protocolVersion);
         }
+    }
 
+    private function completeDaveMediaTransition(int $transitionId): void
+    {
         if ($transitionId === 0) {
-            $this->applySelfDaveEncryptor($protocolVersion);
+            $this->discord->logger->debug('DAVE zero transition executing immediately');
+            $this->executeDaveMediaTransition($transitionId);
+
+            return;
         }
+
+        $this->sendDaveTransitionReady($transitionId);
     }
 
     private function prepareRemoteDaveDecryptor(string $userId, int $protocolVersion): void
@@ -1025,6 +1038,10 @@ final class WS
 
     private function sendDaveTransitionReady(int $transitionId): void
     {
+        $this->discord->logger->debug('sending DAVE transition ready', [
+            'transition_id' => $transitionId,
+        ]);
+
         $this->send(VoicePayload::new(
             Op::VOICE_DAVE_TRANSITION_READY,
             ['transition_id' => $transitionId],

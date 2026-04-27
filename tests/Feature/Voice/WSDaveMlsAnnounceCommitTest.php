@@ -137,6 +137,30 @@ it('sends INVALID_COMMIT_WELCOME when processCommit returns null (protocolVersio
     expect($decoded->opcode)->toBe(Op::VOICE_DAVE_MLS_INVALID_COMMIT_WELCOME);
 });
 
+it('executes transition zero locally after a successful MLS announce commit', function (): void {
+    $sentPayloads = [];
+    $fakeSession = new SessionHandle(new \stdClass());
+    $ws = makeWsForAnnounceCommitTest($this, function (string $payload) use (&$sentPayloads): void {
+        $sentPayloads[] = $payload;
+    }, protocolVersion: 0, session: $fakeSession);
+
+    $state = getAnnounceCommitDaveState($ws);
+    $state->prepareProtocolVersion(1);
+    Runtime::configureCallbacks(processCommitCallback: fn (?SessionHandle $s, string $c): ?array => [
+        'failed' => false,
+        'ignored' => false,
+    ]);
+
+    $payload = pack('n', 0).'commit-payload';
+    $frame = new BinaryFrame(1, Op::VOICE_DAVE_MLS_ANNOUNCE_COMMIT_TRANSITION, $payload);
+    invokeAnnounceCommitMethod($ws, 'handleDaveMlsAnnounceCommitTransition', [$frame]);
+
+    expect($sentPayloads)->toBeEmpty()
+        ->and($state->pendingTransitionId)->toBeNull()
+        ->and($state->protocolVersion)->toBe(1)
+        ->and($state->passthroughMode)->toBeFalse();
+});
+
 it('handles empty commit payload gracefully (transitionId defaults to 0)', function (): void {
     $sentPayloads = [];
     $fakeSession = new SessionHandle(new \stdClass());
@@ -217,4 +241,13 @@ function payloadFromAnnounceCommitSend(mixed $payload): string
     return $payload instanceof \Ratchet\RFC6455\Messaging\Frame
         ? $payload->getPayload()
         : $payload;
+}
+
+function getAnnounceCommitDaveState(WS $ws): State
+{
+    $reflectionProperty = new \ReflectionProperty(WS::class, 'daveState');
+    $reflectionProperty->setAccessible(true);
+
+    /** @var State */
+    return $reflectionProperty->getValue($ws);
 }
