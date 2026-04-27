@@ -20,6 +20,8 @@ use Discord\Factory\Factory;
 use Discord\Parts\Voice\UserConnected;
 use Discord\Voice\Client;
 use Discord\Voice\Client\WS;
+use Discord\Voice\Dave\DecryptorHandle;
+use Discord\Voice\Dave\KeyRatchetHandle;
 use Discord\Voice\Dave\Runtime;
 use Discord\Voice\Dave\SessionHandle;
 use Discord\Voice\Dave\State;
@@ -163,6 +165,43 @@ it('prepareRemoteDaveDecryptor handles createDecryptor failure gracefully withou
     invokeRemoteUsersMethod($ws, 'prepareRemoteDaveDecryptor', ['user1', 1]);
 
     expect($state->getDecryptor('user1'))->toBeNull();
+});
+
+it('prepareRemoteDaveDecryptor keeps transition passthrough while installing a new key ratchet', function (): void {
+    $ws = makeWsForRemoteUsersTest($this);
+    $state = getRemoteUsersDaveState($ws);
+    $state->replaceSession(new SessionHandle(new \stdClass()));
+
+    $decryptor = new DecryptorHandle(new \stdClass());
+    $keyRatchet = new KeyRatchetHandle(new \stdClass());
+    $calls = [];
+
+    Runtime::configureCallbacks(
+        createDecryptorCallback: fn (): ?DecryptorHandle => $decryptor,
+        keyRatchetCallback: fn (SessionHandle $session, string $userId): ?KeyRatchetHandle => $keyRatchet,
+        decryptorPassthroughCallback: function (DecryptorHandle $configuredDecryptor, bool $passthroughMode) use (&$calls, $decryptor): bool {
+            expect($configuredDecryptor)->toBe($decryptor);
+            $calls[] = ['passthrough', $passthroughMode];
+
+            return true;
+        },
+        decryptorKeyRatchetCallback: function (DecryptorHandle $configuredDecryptor, KeyRatchetHandle $configuredKeyRatchet) use (&$calls, $decryptor, $keyRatchet): bool {
+            expect($configuredDecryptor)->toBe($decryptor)
+                ->and($configuredKeyRatchet)->toBe($keyRatchet);
+            $calls[] = ['key_ratchet'];
+
+            return true;
+        }
+    );
+
+    invokeRemoteUsersMethod($ws, 'prepareRemoteDaveDecryptor', ['user1', 1]);
+
+    expect($calls)->toBe([
+        ['passthrough', true],
+        ['key_ratchet'],
+        ['passthrough', false],
+    ])->and($state->getDecryptor('user1'))->toBe($decryptor)
+        ->and($state->getKeyRatchet('user1'))->toBe($keyRatchet);
 });
 
 // ---------------------------------------------------------------------------

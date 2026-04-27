@@ -991,11 +991,14 @@ final class WS
             return;
         }
 
-        if (! DaveRuntime::configureDecryptorPassthrough($decryptor, false)) {
-            $this->discord->logger->error('Failed to configure decryptor passthrough', ['user_id' => $userId]);
+        if (! DaveRuntime::configureDecryptorPassthrough($decryptor, true)) {
+            $this->discord->logger->error('Failed to enable decryptor transition passthrough', ['user_id' => $userId]);
         }
         if (! DaveRuntime::configureDecryptorKeyRatchet($decryptor, $keyRatchet)) {
             $this->discord->logger->error('Failed to configure decryptor key ratchet', ['user_id' => $userId]);
+        }
+        if (! DaveRuntime::configureDecryptorPassthrough($decryptor, false)) {
+            $this->discord->logger->error('Failed to configure decryptor passthrough', ['user_id' => $userId]);
         }
 
         $this->daveState->setKeyRatchet($userId, $keyRatchet);

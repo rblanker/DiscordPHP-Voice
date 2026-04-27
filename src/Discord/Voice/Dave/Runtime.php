@@ -81,6 +81,26 @@ CDEF;
      */
     protected static $keyPackageCallback = null;
 
+    /**
+     * @var null|callable(): ?DecryptorHandle
+     */
+    protected static $createDecryptorCallback = null;
+
+    /**
+     * @var null|callable(SessionHandle, string): ?KeyRatchetHandle
+     */
+    protected static $keyRatchetCallback = null;
+
+    /**
+     * @var null|callable(DecryptorHandle, bool): bool
+     */
+    protected static $decryptorPassthroughCallback = null;
+
+    /**
+     * @var null|callable(DecryptorHandle, KeyRatchetHandle): bool
+     */
+    protected static $decryptorKeyRatchetCallback = null;
+
     protected static ?bool $availabilityOverride = null;
 
     public static function isAvailable(): bool
@@ -134,17 +154,25 @@ CDEF;
         self::$processWelcomeCallback = null;
         self::$createSessionCallback = null;
         self::$keyPackageCallback = null;
+        self::$createDecryptorCallback = null;
+        self::$keyRatchetCallback = null;
+        self::$decryptorPassthroughCallback = null;
+        self::$decryptorKeyRatchetCallback = null;
         self::$availabilityOverride = null;
     }
 
     /**
-     * @param null|callable(string, int): ?string                $frameEncryptor
-     * @param null|callable(string, int): false|string|null      $frameDecryptor
-     * @param null|callable(string, int): ?string                $mlsCommitWelcomeBuilder
-     * @param null|callable(?SessionHandle, string): ?array      $processCommitCallback
-     * @param null|callable(?SessionHandle, string, array): bool $processWelcomeCallback
-     * @param null|callable(?string): ?SessionHandle             $createSessionCallback
-     * @param null|callable(SessionHandle): ?string              $keyPackageCallback
+     * @param null|callable(string, int): ?string                     $frameEncryptor
+     * @param null|callable(string, int): false|string|null           $frameDecryptor
+     * @param null|callable(string, int): ?string                     $mlsCommitWelcomeBuilder
+     * @param null|callable(?SessionHandle, string): ?array           $processCommitCallback
+     * @param null|callable(?SessionHandle, string, array): bool      $processWelcomeCallback
+     * @param null|callable(?string): ?SessionHandle                  $createSessionCallback
+     * @param null|callable(SessionHandle): ?string                   $keyPackageCallback
+     * @param null|callable(): ?DecryptorHandle                       $createDecryptorCallback
+     * @param null|callable(SessionHandle, string): ?KeyRatchetHandle $keyRatchetCallback
+     * @param null|callable(DecryptorHandle, bool): bool              $decryptorPassthroughCallback
+     * @param null|callable(DecryptorHandle, KeyRatchetHandle): bool  $decryptorKeyRatchetCallback
      */
     public static function configureCallbacks(
         ?callable $frameEncryptor = null,
@@ -154,7 +182,11 @@ CDEF;
         ?callable $processWelcomeCallback = null,
         ?callable $createSessionCallback = null,
         ?bool $availabilityOverride = null,
-        ?callable $keyPackageCallback = null
+        ?callable $keyPackageCallback = null,
+        ?callable $createDecryptorCallback = null,
+        ?callable $keyRatchetCallback = null,
+        ?callable $decryptorPassthroughCallback = null,
+        ?callable $decryptorKeyRatchetCallback = null
     ): void {
         self::$frameEncryptor = $frameEncryptor;
         self::$frameDecryptor = $frameDecryptor;
@@ -164,6 +196,10 @@ CDEF;
         self::$createSessionCallback = $createSessionCallback;
         self::$availabilityOverride = $availabilityOverride;
         self::$keyPackageCallback = $keyPackageCallback;
+        self::$createDecryptorCallback = $createDecryptorCallback;
+        self::$keyRatchetCallback = $keyRatchetCallback;
+        self::$decryptorPassthroughCallback = $decryptorPassthroughCallback;
+        self::$decryptorKeyRatchetCallback = $decryptorKeyRatchetCallback;
     }
 
     public static function encryptMediaFrame(string $frame, int $protocolVersion): ?string
@@ -483,6 +519,10 @@ CDEF;
 
     public static function getKeyRatchet(SessionHandle $session, string $userId): ?KeyRatchetHandle
     {
+        if (is_callable(self::$keyRatchetCallback)) {
+            return (self::$keyRatchetCallback)($session, $userId);
+        }
+
         $ffi = self::ffi();
         if (! $ffi instanceof FFI) {
             return null;
@@ -519,6 +559,10 @@ CDEF;
 
     public static function createDecryptor(): ?DecryptorHandle
     {
+        if (is_callable(self::$createDecryptorCallback)) {
+            return (self::$createDecryptorCallback)();
+        }
+
         $ffi = self::ffi();
         if (! $ffi instanceof FFI) {
             return null;
@@ -627,6 +671,10 @@ CDEF;
 
     public static function configureDecryptorPassthrough(DecryptorHandle $decryptor, bool $passthroughMode): bool
     {
+        if (is_callable(self::$decryptorPassthroughCallback)) {
+            return (bool) (self::$decryptorPassthroughCallback)($decryptor, $passthroughMode);
+        }
+
         $ffi = self::ffi();
         if (! $ffi instanceof FFI) {
             return false;
@@ -645,6 +693,10 @@ CDEF;
 
     public static function configureDecryptorKeyRatchet(DecryptorHandle $decryptor, KeyRatchetHandle $keyRatchet): bool
     {
+        if (is_callable(self::$decryptorKeyRatchetCallback)) {
+            return (bool) (self::$decryptorKeyRatchetCallback)($decryptor, $keyRatchet);
+        }
+
         $ffi = self::ffi();
         if (! $ffi instanceof FFI) {
             return false;
