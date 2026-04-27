@@ -216,26 +216,18 @@ final class Packet
                 $this->key
             );
 
-            $daveApplied = false;
+            if ($resultMessage !== false) {
+                $resultMessage = $this->stripRtpExtensionPayload($resultMessage, $message);
+            }
+
             if ($resultMessage !== false && is_callable($this->inboundFrameDecryptor)) {
                 $resultMessage = ($this->inboundFrameDecryptor)($resultMessage, $this);
-                $daveApplied = true;
             }
 
             // If decryption fails, log the error and return
             // Most of the time, the length is 20 bytes either for a ping, or an empty voice/udp packet
             if ($resultMessage === false) {
                 return false;
-            }
-            // Check if the message contains an extension and remove it.
-            // Skip when DAVE decryption was applied: its output is already raw Opus with no RTP extension.
-            elseif (! $daveApplied && (ord($message[0]) & 0x10) !== 0) {
-                // Reads the 2 bytes after the extension identifier to get the extension length
-                $extLengthData = substr($message, 14, 2);
-                $headerExtensionLength = unpack('n', $extLengthData)[1];
-
-                // Remove 4 * headerExtensionLength bytes from the beginning of the decrypted result
-                $resultMessage = substr($resultMessage, 4 * $headerExtensionLength);
             }
         } catch (\Throwable $e) {
             //$this->log->error('Exception occurred when decoding voice packet: ' . $e->getMessage());
@@ -337,9 +329,9 @@ final class Packet
             return null;
         }
 
-        $this->headerSize = HeaderValuesEnum::RTP_HEADER_OR_NONCE_LENGTH->value;
         $firstByte = ord($message[0]);
-        if (($firstByte >> 4) & 0x01) {
+        $this->headerSize = HeaderValuesEnum::RTP_HEADER_OR_NONCE_LENGTH->value + (($firstByte & 0x0F) * 4);
+        if (($firstByte & 0x10) !== 0) {
             $this->headerSize += 4;
         }
 
@@ -352,6 +344,24 @@ final class Packet
     public function getHeader(): ?string
     {
         return $this->header ?? null;
+    }
+
+    private function stripRtpExtensionPayload(string $frame, string $message): string|false
+    {
+        if ((ord($message[0]) & 0x10) === 0) {
+            return $frame;
+        }
+
+        $csrcCount = ord($message[0]) & 0x0F;
+        $extensionLengthOffset = HeaderValuesEnum::RTP_HEADER_OR_NONCE_LENGTH->value + ($csrcCount * 4) + 2;
+        $extLengthData = substr($message, $extensionLengthOffset, 2);
+        $unpacked = unpack('nwords', $extLengthData);
+
+        if (! is_array($unpacked)) {
+            return false;
+        }
+
+        return substr($frame, 4 * $unpacked['words']);
     }
 
     /**

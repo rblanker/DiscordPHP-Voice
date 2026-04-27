@@ -97,9 +97,13 @@ it('detects standard and extension RTP headers when setting the header', functio
     $packet = packetWithoutConstructor();
     $standardMessage = pack('CCnNN', 0x80, 0x78, 1, 2, 3).'payload';
     $extensionMessage = pack('CCnNN', 0x90, 0x78, 1, 2, 3)."\xBE\xDE\x00\x01".'payload';
+    $csrcMessage = pack('CCnNNN', 0x81, 0x78, 1, 2, 3, 4).'payload';
+    $csrcExtensionMessage = pack('CCnNNN', 0x91, 0x78, 1, 2, 3, 4)."\xBE\xDE\x00\x01".'payload';
 
     expect($packet->setHeader($standardMessage))->toBe(substr($standardMessage, 0, 12))
-        ->and($packet->setHeader($extensionMessage))->toBe(substr($extensionMessage, 0, 16));
+        ->and($packet->setHeader($extensionMessage))->toBe(substr($extensionMessage, 0, 16))
+        ->and($packet->setHeader($csrcMessage))->toBe(substr($csrcMessage, 0, 16))
+        ->and($packet->setHeader($csrcExtensionMessage))->toBe(substr($csrcExtensionMessage, 0, 20));
 });
 
 it('returns null or false for empty and incomplete input', function (): void {
@@ -161,10 +165,11 @@ it('returns false not null when libsodium throws during decryption', function ()
         ->and($packet->getAudioData())->toBeFalse();
 });
 
-it('does not re-strip RTP extension from DAVE-decrypted audio', function (): void {
+it('strips RTP extension payload before DAVE frame decryption', function (): void {
     $key = random_bytes(SODIUM_CRYPTO_AEAD_AES256GCM_KEYBYTES);
     $rawPacket = buildExtensionPacket($key, 5, 960, 12345, 'opus-audio', 'EXT!');
     $daveOutput = 'dave-decrypted-opus';
+    $daveInput = null;
 
     $packet = new Packet(
         $rawPacket,
@@ -174,11 +179,15 @@ it('does not re-strip RTP extension from DAVE-decrypted audio', function (): voi
         true,
         $key,
         null,
-        fn (string $frame, Packet $p): string => $daveOutput
+        function (string $frame, Packet $p) use (&$daveInput, $daveOutput): string {
+            $daveInput = $frame;
+
+            return $daveOutput;
+        }
     );
 
-    // DAVE returns raw Opus; extension stripping must NOT be applied to it
-    expect($packet->getAudioData())->toBe($daveOutput);
+    expect($daveInput)->toBe('opus-audio')
+        ->and($packet->getAudioData())->toBe($daveOutput);
 });
 
 it('nonce counter is independent of seq preventing ciphertext reuse after rollover', function (): void {
