@@ -103,6 +103,14 @@ class VoiceClient extends EventEmitter
     public ?OpusDecoderInterface $opusdecoder = null;
 
     /**
+     * Per-SSRC OpusFfi decoder instances. Each speaker gets their own persistent
+     * decoder so inter-frame codec state is never shared or reset between users.
+     *
+     * @var array<int, OpusFfi>
+     */
+    protected array $ffiDecoders = [];
+
+    /**
      * The Voice WebSocket endpoint.
      *
      * @var string|null The endpoint the Voice WebSocket and UDP client will connect to.
@@ -1338,8 +1346,17 @@ class VoiceClient extends EventEmitter
             return; // no audio data to write
         }
 
-        if (isset($this->opusdecoder)) {
-            $data = $this->opusdecoder->decode($voicePacket->decryptedAudio);
+        if ($this->opusdecoder !== null) {
+            if ($this->opusdecoder instanceof OpusFfi) {
+                // Use a dedicated persistent decoder per SSRC so each speaker's
+                // Opus codec state remains independent.
+                if (! isset($this->ffiDecoders[$ss->ssrc])) {
+                    $this->ffiDecoders[$ss->ssrc] = new OpusFfi();
+                }
+                $data = $this->ffiDecoders[$ss->ssrc]->decode($voicePacket->decryptedAudio);
+            } else {
+                $data = $this->opusdecoder->decode($voicePacket->decryptedAudio);
+            }
 
             if (empty(trim($data))) {
                 $this->discord->getLogger()->debug('Received empty audio data.', ['ssrc' => $ss->ssrc]);
@@ -1547,6 +1564,7 @@ class VoiceClient extends EventEmitter
         }
 
         $this->voiceDecoders = [];
+        $this->ffiDecoders = [];
         $this->receiveStreams = [];
         $this->speakingStatus = Collection::for(Speaking::class, 'ssrc');
         $this->ssrcToUserId = [];
