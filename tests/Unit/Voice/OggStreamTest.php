@@ -53,6 +53,7 @@ it('combines partial packets across pages and returns eof once exhausted', funct
         .buildOggStreamPageFixture([255], $packetHead)
         .buildOggStreamPageFixture([10, strlen($secondPacket)], $packetTail.$secondPacket)
     );
+    $buffer->close();
 
     $stream = await(OggStream::fromBuffer($buffer));
 
@@ -73,6 +74,7 @@ it('returns eof when only an incomplete packet remains', function (): void {
         .buildOggStreamPageFixture([strlen($tagsData)], $tagsData)
         .buildOggStreamPageFixture([255], $partialPacket)
     );
+    $buffer->close();
 
     $stream = await(OggStream::fromBuffer($buffer));
 

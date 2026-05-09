@@ -696,6 +696,13 @@ class VoiceClient
             $ogg = $os;
             $this->startTime = microtime(true) + 0.5;
             $this->readOpusTimer = $this->discord->getLoop()->addTimer(0.5, fn () => $this->readOggOpus($deferred, $ogg, $loops));
+        }, function (\Throwable $e) use ($deferred) {
+            // Surface the failure on the playback deferred instead of letting the
+            // promise rejection bubble out as an unhandled-rejection notice. This
+            // covers ffmpeg exiting before producing a valid Ogg header (e.g. bad
+            // input file, missing codec, or premature stream close).
+            $this->reset();
+            $deferred->reject($e);
         });
 
         return $deferred->promise();

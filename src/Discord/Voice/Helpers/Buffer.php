@@ -125,6 +125,8 @@ class Buffer implements WritableStreamInterface
 
         if (($output = $this->readRaw($length)) !== false) {
             $deferred->resolve($output);
+        } elseif ($this->closed) {
+            $deferred->reject(new \RuntimeException('Buffer closed'));
         } else {
             $this->reads[] = [$deferred, $length];
             $key = array_key_last($this->reads);

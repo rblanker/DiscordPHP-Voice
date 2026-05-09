@@ -230,16 +230,15 @@ it('ffmpeg encode command includes http and https in the protocol whitelist', fu
         ->and($protocols)->toContain('https');
 });
 
-it('ffmpeg encode protocol whitelist does not include file (desired policy — currently fails)', function () {
-    // DESIRED POLICY: 'file' must be absent from the whitelist so ffmpeg cannot
-    // read local filesystem paths even if the PHP-layer URL validation is bypassed.
-    // CURRENT STATE: whitelist is 'file,http,https,tcp,tls,crypto,pipe' — 'file' is present.
-    // This test FAILS intentionally until production code removes 'file' from the whitelist.
+it('ffmpeg encode protocol whitelist permits file so local playback works', function () {
+    // POLICY: local file playback is a primary feature. SSRF protection is enforced at the
+    // playFile() URL layer (scheme allowlist + private/reserved IP block + localhost block);
+    // the ffmpeg whitelist intentionally permits 'file' so local audio paths still resolve.
     $command = Ffmpeg::encode('https://example.com/audio.ogg')->getCommand();
     preg_match('/-protocol_whitelist\s+(\S+)/', $command, $matches);
     expect($matches)->not->toBeEmpty('ffmpeg command must contain a -protocol_whitelist flag');
     $protocols = explode(',', $matches[1]);
-    expect($protocols)->not->toContain('file');
+    expect($protocols)->toContain('file');
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

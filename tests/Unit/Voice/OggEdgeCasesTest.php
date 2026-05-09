@@ -138,6 +138,7 @@ it('signals EOS by resolving subsequent OggStream::getPacket() calls with null',
         .buildEdgeOggPage([strlen($tagsData)], $tagsData)
         .buildEdgeOggPage([strlen($finalPacket)], $finalPacket, headerType: 0x04)
     );
+    $buffer->close();
 
     $stream = await(OggStream::fromBuffer($buffer));
 

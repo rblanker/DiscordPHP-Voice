@@ -116,7 +116,7 @@ it('ends with final data, closes once, and rejects writes after closing', functi
 
     expect($closeEvents)->toBe(1)
         ->and(fn () => await($buffer->read(1, timeout: 0)))
-        ->toThrow(BufferTimedOutException::class, 'Reading from the buffer timed out.');
+        ->toThrow(\RuntimeException::class, 'Buffer closed');
 });
 
 function trackPromise(PromiseInterface $promise): object
