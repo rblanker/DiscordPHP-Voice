@@ -20,5 +20,11 @@
         <include>
             <directory suffix=".php">src</directory>
         </include>
+        <exclude>
+            <!-- Legacy duplicate kept for BC; active code lives at src/Discord/Voice/ByteBuffer. -->
+            <directory suffix=".php">src/Discord/Voice/Helpers</directory>
+            <!-- Legacy enum retained for BC. PHPStan also excludes these paths. -->
+            <file>src/Discord/WebSockets/OpEnum.php</file>
+        </exclude>
     </source>
 </phpunit>
