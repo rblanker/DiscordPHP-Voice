@@ -136,5 +136,5 @@ it('open() throws RuntimeException when path is not writable', function (): void
 
 function wavWriterTempPath(string $tag): string
 {
-    return sys_get_temp_dir() . '/wavwriter-test-' . $tag . '-' . getmypid() . '.wav';
+    return sys_get_temp_dir().'/wavwriter-test-'.$tag.'-'.getmypid().'.wav';
 }

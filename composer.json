@@ -23,10 +23,11 @@
         "ext-ffi": "*"
     },
     "require-dev": {
-        "team-reflex/discord-php": "dev-master",
         "friendsofphp/php-cs-fixer": "^3",
+        "overtrue/phplint": "^9.7",
         "pestphp/pest": "^4.1.2",
-        "phpstan/phpstan": "^2.1"
+        "phpstan/phpstan": "^2.1",
+        "team-reflex/discord-php": "dev-master"
     },
     "autoload": {
         "psr-4": {
@@ -39,22 +40,24 @@
         "cs": ["./vendor/bin/php-cs-fixer fix"],
         "cs:check": ["./vendor/bin/php-cs-fixer fix --dry-run --diff"],
         "cs-unsupported": ["./vendor/bin/php-cs-fixer fix --allow-unsupported-php-version yes"],
+        "lint": ["./vendor/bin/phplint"],
         "unit": ["pest --testdox"],
         "unit-no-dave": ["pest --testdox"],
         "pest": "pest --parallel",
         "coverage": ["XDEBUG_MODE=coverage pest --coverage-html coverage --testdox"],
-        "check": ["@cs:check", "@unit"]
+        "check": ["@cs:check", "@lint", "@unit"]
     },
     "scripts-descriptions": {
         "pint": "Format code with Laravel Pint",
         "cs": "Format code with PHP-CS-Fixer (rewrites files)",
         "cs:check": "Check code style with PHP-CS-Fixer (dry run, no writes)",
         "cs-unsupported": "Format code with PHP-CS-Fixer on unsupported PHP versions",
+        "lint": "Run PHPLint syntax check on all PHP files",
         "unit": "Run unit tests with Pest (set DISCORDPHP_DAVE_LIBRARY to enable libdave-dependent tests)",
         "unit-no-dave": "Run unit tests with Pest (without libdave)",
         "pest": "Run tests in parallel with Pest",
         "coverage": "Run tests with Xdebug coverage report",
-        "check": "Run all checks: Pint, CS-Fixer (dry run), and unit tests"
+        "check": "Run all checks: CS-Fixer (dry run), PHPLint, and unit tests"
     },
     "config": {
         "allow-plugins": {

@@ -206,8 +206,8 @@ class GatewayCoordinator
         }
 
         $tp = TransitionPayload::parse($data->payload);
-        $transitionId = $tp?->transitionId ?? 0;
-        $commitWelcome = $tp?->payload ?? '';
+        $transitionId = $tp !== null ? $tp->transitionId : 0;
+        $commitWelcome = $tp !== null ? $tp->payload : '';
 
         $result = Runtime::processCommit($daveState->session, $commitWelcome);
         if ($result !== null && ! ($result['failed'] ?? true) && ! ($result['ignored'] ?? false)) {
@@ -249,8 +249,8 @@ class GatewayCoordinator
         }
 
         $tp = TransitionPayload::parse($data->payload);
-        $transitionId = $tp?->transitionId ?? 0;
-        $commit = $tp?->payload ?? '';
+        $transitionId = $tp !== null ? $tp->transitionId : 0;
+        $commit = $tp !== null ? $tp->payload : '';
         $result = Runtime::processCommit($daveState->session, $commit);
 
         if ($result === null || ($result['failed'] ?? true)) {
@@ -280,8 +280,8 @@ class GatewayCoordinator
         }
 
         $tp = TransitionPayload::parse($data->payload);
-        $transitionId = $tp?->transitionId ?? 0;
-        $welcome = $tp?->payload ?? '';
+        $transitionId = $tp !== null ? $tp->transitionId : 0;
+        $welcome = $tp !== null ? $tp->payload : '';
         $joinedGroup = Runtime::processWelcome(
             $daveState->session,
             $welcome,
@@ -304,9 +304,12 @@ class GatewayCoordinator
     public function handleDaveMlsInvalidCommitWelcome(mixed $data): void
     {
         $this->host->getLogger()->warning('DAVE: invalid MLS commit/welcome; recovering state.');
-        $transitionId = $data instanceof BinaryFrame
-            ? (TransitionPayload::parse($data->payload)?->transitionId ?? 0)
-            : (int) ($data->d['transition_id'] ?? 0);
+        if ($data instanceof BinaryFrame) {
+            $tp = TransitionPayload::parse($data->payload);
+            $transitionId = $tp !== null ? $tp->transitionId : 0;
+        } else {
+            $transitionId = (int) ($data->d['transition_id'] ?? 0);
+        }
         $this->handleInvalidDaveTransition($transitionId, true);
     }
 

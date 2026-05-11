@@ -50,7 +50,6 @@ it('getRawKey returns the rawKey property unmodified', function (): void {
     expect($ws->getRawKey())->toBe([1, 2, 3, 4]);
 });
 
-
 it('handleCloseVoiceDisconnected logs the close opcode without raising', function (): void {
     $ws = makeWsForGetters();
 

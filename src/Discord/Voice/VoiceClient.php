@@ -39,7 +39,6 @@ use Discord\Voice\Recording\WavWriter;
 use Discord\WebSockets\Op;
 use Discord\WebSockets\Payload;
 use Discord\WebSockets\VoicePayload;
-use Evenement\EventEmitter;
 use Evenement\EventEmitterTrait;
 use Ratchet\Client\WebSocket;
 use React\ChildProcess\Process;
@@ -609,8 +608,8 @@ class VoiceClient
      * @param int    $channels  Number of audio channels (default: 2 = stereo).
      * @param int    $audioRate Sample rate in Hz (default: 48000).
      *
-     * @throws FileNotFoundException     if the file does not exist.
-     * @throws \RuntimeException         if the file cannot be opened or audio is already playing.
+     * @throws FileNotFoundException if the file does not exist.
+     * @throws \RuntimeException     if the file cannot be opened or audio is already playing.
      *
      * @return PromiseInterface
      */
@@ -635,7 +634,6 @@ class VoiceClient
     }
 
     /**
-     *
      * @param resource|Process|Stream $stream The Ogg Opus stream to be sent.
      *
      * @throws \RuntimeException
@@ -1683,10 +1681,10 @@ class VoiceClient
      *  - `RecordingFormat::WAV` — per-user WAV files via pure-PHP WavWriter
      *  - `RecordingFormat::OGG` — per-user OGG Opus files via ffmpeg (requires ffmpeg)
      *
-     * @param RecordingFormat|null              $format     Output format. Null = PCM events only (no file writing).
-     * @param (callable(string): string)|null   $outputPath Callback returning the file path for a given user ID.
-     *                                                       Required for WAV and OGG formats. Optional for PCM
-     *                                                       (when provided, raw PCM bytes are written to the file).
+     * @param RecordingFormat|null            $format     Output format. Null = PCM events only (no file writing).
+     * @param (callable(string): string)|null $outputPath Callback returning the file path for a given user ID.
+     *                                                    Required for WAV and OGG formats. Optional for PCM
+     *                                                    (when provided, raw PCM bytes are written to the file).
      *
      * @throws \RuntimeException         if already recording.
      * @throws \InvalidArgumentException if $format is non-null/non-PCM but $outputPath is null.

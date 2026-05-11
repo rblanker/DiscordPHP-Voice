@@ -11,7 +11,7 @@ Before you start using this Library, you **need** to know how PHP works, you nee
 ### Requirements
 
 - [DiscordPHP](https://github.com/discord-php/DiscordPHP/)
-- [PHP 8.1.2](https://php.net) or higher (latest version recommended)
+- [PHP 8.3](https://php.net) or higher (latest version recommended)
 	- x86 (32-bit) PHP requires [`ext-gmp`](https://www.php.net/manual/en/book.gmp.php) enabled.
 - [`ext-json`](https://www.php.net/manual/en/book.json.php)
 
@@ -22,7 +22,7 @@ Before you start using this Library, you **need** to know how PHP works, you nee
 - **[📡 Protocol Reference →](docs/PROTOCOL.md)** — Voice gateway opcodes, DAVE opcodes, and close codes reference table.
 - DAVE protocol negotiation is now supported at the voice gateway layer.
 - Binary DAVE voice opcodes are parsed and routed.
-- If [`ext-ffi`](https://www.php.net/manual/en/book.ffi.php) is enabled and `libdave.so` is available, the runtime will load real libdave session and media APIs and detect the maximum supported DAVE protocol version.
+- **Required:** [`ext-ffi`](https://www.php.net/manual/en/book.ffi.php) must be enabled and `libdave` must be available — the runtime loads libdave session and media APIs and detects the maximum supported DAVE protocol version.
 - Use `./scripts/setup-libdave.sh` to fetch the published `discord/libdave` release asset into `.cache/libdave` without vendoring the binary into git. The script auto-detects your OS and architecture (Linux, macOS, Windows — x64 and ARM64).
 - Export `DISCORDPHP_DAVE_LIBRARY` pointing to the platform library (e.g. `.cache/libdave/lib/libdave.so` on Linux) to force the runtime to use the repo-local shared library path.
 - CI uses the same setup script and enables `ext-ffi` so native DAVE coverage stays runnable.
@@ -52,8 +52,9 @@ Use the bundled Pest runner for local validation. `composer unit` runs the defau
 | Script | Description |
 |--------|-------------|
 | `composer unit` | Run the test suite (`pest --testdox`) |
-| `composer check` | Run Pint style check + tests (CI-safe, no rewrites) |
-| `composer cs` | Auto-format with Pint |
+| `composer lint` | Run PHPLint syntax check |
+| `composer check` | Run CS-Fixer dry-run + PHPLint + tests (CI-safe, no rewrites) |
+| `composer cs` | Auto-format with PHP-CS-Fixer (rewrites files) |
 | `composer cs:check` | Check style without rewriting files |
 | `composer phpstan` | Run static analysis (level 5) |
 | `composer infection` | Run mutation testing (slow — local only) |
@@ -147,7 +148,7 @@ Common exceptions include `LibDaveNotFoundException`, `EnterChannelDeniedExcepti
 
 ## Contributing
 
-We are open to contributions. However, please make sure you follow our coding standards (PSR-4 autoloading and custom styling). Please run php-cs-fixer before opening a pull request by running `composer run-script cs`.
+We are open to contributions. However, please make sure you follow our coding standards (PSR-4 autoloading and custom styling). Please run php-cs-fixer before opening a pull request by running `composer cs`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, coding standards, and PR guidelines.
 
@@ -155,4 +156,4 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ## License
 
-MIT License, &copy; David Cole and other contributers 2016-present.
+MIT License, &copy; David Cole and other contributors 2016-present.

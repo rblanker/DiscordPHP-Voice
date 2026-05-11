@@ -61,7 +61,9 @@ it('readOggOpus resolves the deferred and resets state on Ogg EOF', function ():
 
     $deferred = new Deferred();
     $resolved = false;
-    $deferred->promise()->then(function () use (&$resolved): void { $resolved = true; });
+    $deferred->promise()->then(function () use (&$resolved): void {
+        $resolved = true;
+    });
 
     $loops = 0;
     invokeReadOggOpus($vc, $deferred, $ogg, $loops);
@@ -109,7 +111,9 @@ it('readOggOpus dispatches packets via UDP::sendBuffer for non-paused playback',
 
     $deferred = new Deferred();
     $resolved = false;
-    $deferred->promise()->then(function () use (&$resolved): void { $resolved = true; });
+    $deferred->promise()->then(function () use (&$resolved): void {
+        $resolved = true;
+    });
 
     $loops = 0;
     invokeReadOggOpus($vc, $deferred, $ogg, $loops);
@@ -128,9 +132,17 @@ function makeVcForReadOpus(UDP $udp, bool $paused): VoiceClient
     $vc = (new \ReflectionClass(VoiceClient::class))->newInstanceWithoutConstructor();
 
     $discord = new class extends Discord {
-        public function __construct() {}
-        public function getLogger(): \Psr\Log\LoggerInterface { return new NullLogger(); }
-        public function getLoop(): \React\EventLoop\LoopInterface { return Loop::get(); }
+        public function __construct()
+        {
+        }
+        public function getLogger(): \Psr\Log\LoggerInterface
+        {
+            return new NullLogger();
+        }
+        public function getLoop(): \React\EventLoop\LoopInterface
+        {
+            return Loop::get();
+        }
     };
 
     $vc->discord = $discord;
@@ -159,8 +171,12 @@ function makeUdpStubForOpus(\PHPUnit\Framework\TestCase $tc, int &$sendCalls, in
         ->onlyMethods(['sendBuffer', 'insertSilence'])
         ->getMock();
 
-    $mock->method('sendBuffer')->willReturnCallback(function () use (&$sendCalls): void { $sendCalls++; });
-    $mock->method('insertSilence')->willReturnCallback(function () use (&$silenceCalls): void { $silenceCalls++; });
+    $mock->method('sendBuffer')->willReturnCallback(function () use (&$sendCalls): void {
+        $sendCalls++;
+    });
+    $mock->method('insertSilence')->willReturnCallback(function () use (&$silenceCalls): void {
+        $silenceCalls++;
+    });
 
     return $mock;
 }

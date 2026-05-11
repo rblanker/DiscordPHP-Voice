@@ -259,7 +259,7 @@ it('handleMessages drops RTCP Sender Report packets before calling handleAudioDa
     $udp->ws->vc = $vc;
 
     // RTCP SR: byte0=0x80 (RTP v2, no padding/extension), byte1=0xC8 (PT=200)
-    $rtcpSr = pack('CC', 0x80, 0xC8) . str_repeat("\x00", 30);
+    $rtcpSr = pack('CC', 0x80, 0xC8).str_repeat("\x00", 30);
 
     $udp->handleMessages(str_repeat("\x00", SODIUM_CRYPTO_AEAD_AES256GCM_KEYBYTES));
     $udp->emit('message', [$rtcpSr]);
@@ -278,7 +278,7 @@ it('handleMessages drops RTCP Receiver Report packets', function (): void {
     $udp->ws->vc = $vc;
 
     // RTCP RR: byte1=0xC9 (PT=201)
-    $rtcpRr = pack('CC', 0x80, 0xC9) . str_repeat("\x00", 30);
+    $rtcpRr = pack('CC', 0x80, 0xC9).str_repeat("\x00", 30);
 
     $udp->handleMessages(str_repeat("\x00", SODIUM_CRYPTO_AEAD_AES256GCM_KEYBYTES));
     $udp->emit('message', [$rtcpRr]);
@@ -297,7 +297,7 @@ it('handleMessages drops non-RTP-v2 packets', function (): void {
     $udp->ws->vc = $vc;
 
     // byte0=0x40: version=1, not RTP v2
-    $nonRtpV2 = pack('CC', 0x40, 0x78) . str_repeat("\x00", 30);
+    $nonRtpV2 = pack('CC', 0x40, 0x78).str_repeat("\x00", 30);
 
     $udp->handleMessages(str_repeat("\x00", SODIUM_CRYPTO_AEAD_AES256GCM_KEYBYTES));
     $udp->emit('message', [$nonRtpV2]);
@@ -319,7 +319,7 @@ it('handleMessages passes valid RTP packets (PT=0x78) to handleAudioData', funct
     $udp->ws->vc = $vc;
 
     // Valid RTP v2, PT=0x78 (Discord Opus), 32 bytes minimum
-    $rtpPacket = pack('CCnNN', 0x80, 0x78, 1, 0, 99) . str_repeat("\x00", 20);
+    $rtpPacket = pack('CCnNN', 0x80, 0x78, 1, 0, 99).str_repeat("\x00", 20);
 
     $udp->handleMessages(str_repeat("\x00", SODIUM_CRYPTO_AEAD_AES256GCM_KEYBYTES));
     $udp->emit('message', [$rtpPacket]);
@@ -343,7 +343,7 @@ it('handleMessages passes RTP packets with the marker bit set (PT=0xF8) to handl
     $udp->ws->vc = $vc;
 
     // byte1=0xF8: M=1, PT=0x78 (120 & 0x7F = 120, not in 72–95 RTCP range)
-    $rtpMarked = pack('CCnNN', 0x80, 0xF8, 2, 0, 99) . str_repeat("\x00", 20);
+    $rtpMarked = pack('CCnNN', 0x80, 0xF8, 2, 0, 99).str_repeat("\x00", 20);
 
     $udp->handleMessages(str_repeat("\x00", SODIUM_CRYPTO_AEAD_AES256GCM_KEYBYTES));
     $udp->emit('message', [$rtpMarked]);

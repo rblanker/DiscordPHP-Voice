@@ -152,7 +152,9 @@ function makeVcForPlay(bool $ready = false, bool $speaking = false): VoiceClient
 function catchPromiseError(\React\Promise\PromiseInterface $promise): ?\Throwable
 {
     $caught = null;
-    $promise->then(null, function (\Throwable $e) use (&$caught): void { $caught = $e; });
+    $promise->then(null, function (\Throwable $e) use (&$caught): void {
+        $caught = $e;
+    });
 
     return $caught;
 }

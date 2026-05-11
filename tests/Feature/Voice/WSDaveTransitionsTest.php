@@ -19,6 +19,7 @@ use Discord\Discord;
 use Discord\Voice\Client as VoiceClient;
 use Discord\Voice\Client\WS;
 use Discord\Voice\Dave\EncryptorHandle;
+use Discord\Voice\Dave\GatewayCoordinator;
 use Discord\Voice\Dave\Runtime;
 use Discord\Voice\Dave\State;
 use Discord\Voice\Exceptions\Libraries\LibDaveNotFoundException;
@@ -166,7 +167,7 @@ it('applySelfDaveEncryptor returns early without crashing when encryptor is null
     $state = getTransitionsDaveState($ws);
     expect($state->encryptor)->toBeNull();
 
-    invokeTransitionsWsMethod($ws, 'applySelfDaveEncryptor', [1]);
+    invokeTransitionsWsMethod(getTransitionsCoordinator($ws), 'applySelfDaveEncryptor', [1]);
 
     expect($sentPayloads)->toBeEmpty();
 });
@@ -181,7 +182,7 @@ it('applySelfDaveEncryptor returns early without crashing when protocolVersion i
     $state->replaceEncryptor(new EncryptorHandle(new \stdClass()));
 
     // protocolVersion = 0 → tries configureEncryptorPassthrough (gracefully fails without libdave) and returns.
-    invokeTransitionsWsMethod($ws, 'applySelfDaveEncryptor', [0]);
+    invokeTransitionsWsMethod(getTransitionsCoordinator($ws), 'applySelfDaveEncryptor', [0]);
 
     // Nothing sent over WebSocket in either code path.
     expect($sentPayloads)->toBeEmpty();
@@ -276,6 +277,17 @@ function getTransitionsDaveState(WS $ws): State
     $prop->setAccessible(true);
 
     return $prop->getValue($ws);
+}
+
+/**
+ * Extract the GatewayCoordinator from a WS instance.
+ */
+function getTransitionsCoordinator(WS $ws): GatewayCoordinator
+{
+    $method = new \ReflectionMethod(WS::class, 'getCoordinator');
+    $method->setAccessible(true);
+
+    return $method->invoke($ws);
 }
 
 /**

@@ -673,24 +673,9 @@ final class WS implements GatewayCoordinatorHost
         return $this->getCoordinator()->initializeDaveRuntimeState($protocolVersion, $resetState);
     }
 
-    private function prepareRemoteDaveDecryptor(string $userId, int $protocolVersion): void
-    {
-        $this->getCoordinator()->prepareRemoteDaveDecryptor($userId, $protocolVersion);
-    }
-
-    private function applySelfDaveEncryptor(int $protocolVersion): void
-    {
-        $this->getCoordinator()->applySelfDaveEncryptor($protocolVersion);
-    }
-
     private function sendDaveKeyPackage(): void
     {
         $this->getCoordinator()->sendDaveKeyPackage();
-    }
-
-    private function handleInvalidDaveTransition(int $transitionId, bool $regenerateKeyPackage = false): void
-    {
-        $this->getCoordinator()->handleInvalidDaveTransition($transitionId, $regenerateKeyPackage);
     }
 
     private function recordGatewaySequence(?int $sequence): void

@@ -95,9 +95,17 @@ function makeVcWithDiscordCapturing(): array
 
     $discord = new class extends Discord {
         public array $sent = [];
-        public function __construct() {}
-        public function send(object|array $data, bool $force = false): void { $this->sent[] = $data; }
-        public function getLogger(): \Psr\Log\LoggerInterface { return new NullLogger(); }
+        public function __construct()
+        {
+        }
+        public function send(object|array $data, bool $force = false): void
+        {
+            $this->sent[] = $data;
+        }
+        public function getLogger(): \Psr\Log\LoggerInterface
+        {
+            return new NullLogger();
+        }
     };
 
     $vc->discord = $discord;

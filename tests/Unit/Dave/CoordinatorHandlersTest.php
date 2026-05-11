@@ -58,9 +58,11 @@ it('handleDaveMlsCommitWelcome falls through to processWelcome when commit is ig
     Runtime::configureCallbacks(
         availabilityOverride: true,
         processCommitCallback: fn () => ['failed' => false, 'ignored' => true],
-        processWelcomeCallback: function () use (&$welcomeCalls): bool { $welcomeCalls++;
+        processWelcomeCallback: function () use (&$welcomeCalls): bool {
+            $welcomeCalls++;
 
-            return true; },
+            return true;
+        },
     );
 
     $host = makeCoordHost();
@@ -134,9 +136,11 @@ it('handleDaveMlsExternalSender records the sender on State and triggers a key-p
     $kpSent = null;
     Runtime::configureCallbacks(
         availabilityOverride: true,
-        keyPackageCallback: function () use (&$kpSent): ?string { $kpSent = 'kp-bytes';
+        keyPackageCallback: function () use (&$kpSent): ?string {
+            $kpSent = 'kp-bytes';
 
-            return 'kp-bytes'; },
+            return 'kp-bytes';
+        },
     );
 
     $host = makeCoordHost();

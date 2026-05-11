@@ -15,7 +15,6 @@ declare(strict_types=1);
 
 namespace Discord\Voice;
 
-use Evenement\EventEmitter;
 use Evenement\EventEmitterTrait;
 use React\Stream\DuplexStreamInterface;
 use React\Stream\WritableStreamInterface;

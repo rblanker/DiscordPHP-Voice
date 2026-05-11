@@ -2,7 +2,7 @@
 
 ## Phase 3 validation follow-ups
 
-- [ ] Install/configure `phplint` if CI expects it; the local validation run reported `phplint` as unavailable (`status 127`) and no Composer lint script exists.
+- [x] Install/configure `phplint`: added `overtrue/phplint ^9.7` to `require-dev`, `composer lint` script, folded into `composer check`. CI updated to use `composer lint` instead of global tool.
 - [ ] Document intentional BC-impacting changes in release notes or upgrade guidance:
   - `VoiceClient::$speakingStatus` and `VoiceClient::$ssrcToUserId` changed from `public` to `protected`.
   - `VoiceClient::$voiceDecoders` changed from untyped/null default to `public array $voiceDecoders = []`.
@@ -14,8 +14,8 @@
 Current coverage: **83.26%** statements (with legacy BC files excluded). Real remaining gaps require either real subprocesses or real `libdave` handles:
 
 - [ ] `VoiceClient::start` / `readDCAOpus` / `createDecoder` / `monitorProcessExit` / `handleAudioData` recording branches — all spawn ffmpeg or DCA subprocesses. Best covered by extending the live integration "full session" test (`tests/Integration/VoiceConnectionTest.php`) rather than by mocking subprocesses out.
-- [ ] `Dave/Runtime` direct-FFI paths (`encryptWithEncryptor`, `setSessionProtocolVersion`, `setExternalSender`, `getKeyRatchet` non-callback path, etc.) — only reachable with a real `libdave.so` and live `SessionHandle`/`EncryptorHandle` pointers. Add a guarded suite that skips unless `DISCORDPHP_DAVE_LIBRARY` is set and produces real handles via `Runtime::createSession()` + `Runtime::createEncryptor()`.
-- [ ] `Client/Packet::initBufferEncryption` / `initBufferNoEncryption` are deprecated XSalsa20Poly1305 paths kept only for back-compat — verify they still need to ship before adding tests for them.
+- [x] `Dave/Runtime` direct-FFI paths — `tests/Unit/Dave/RuntimeNativeFfiTest.php` added (6 tests, guarded by `DISCORDPHP_DAVE_LIBRARY`): `setSessionProtocolVersion`, `setExternalSender`, `getKeyRatchet` null path, `configureDecryptorPassthrough(false)`, `encryptWithEncryptor` without key ratchet, `decryptWithDecryptor` on garbage frame.
+- [x] `Client/Packet::initBufferEncryption` / `initBufferNoEncryption` — deleted (zero callers, dead code confirmed). No tests needed.
 
 ## Security review notes
 

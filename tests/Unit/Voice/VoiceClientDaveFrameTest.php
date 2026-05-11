@@ -331,8 +331,6 @@ it('decryptDaveFrame stops fan-out on explicit false and does not try frameDecry
         ->and($frameCalls)->toBe(0);     // frameDecryptor never reached
 });
 
-
-
 function getDaveStateFromClient(VoiceClient $voiceClient): State
 {
     $daveStateProp = new \ReflectionProperty(WS::class, 'daveState');

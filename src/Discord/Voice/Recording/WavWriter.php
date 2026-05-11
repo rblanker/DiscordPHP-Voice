@@ -34,7 +34,9 @@ class WavWriter
 
     private int $dataBytes = 0;
 
-    public function __construct(private string $path) {}
+    public function __construct(private string $path)
+    {
+    }
 
     /**
      * Opens the output file and writes a 44-byte WAV header with placeholder
@@ -123,17 +125,17 @@ class WavWriter
         $blockAlign = self::NUM_CHANNELS * (self::BITS_PER_SAMPLE / 8);
 
         return 'RIFF'
-            . pack('V', 36 + $dataBytes)
-            . 'WAVE'
-            . 'fmt '
-            . pack('V', 16)
-            . pack('v', 1)
-            . pack('v', self::NUM_CHANNELS)
-            . pack('V', self::SAMPLE_RATE)
-            . pack('V', $byteRate)
-            . pack('v', $blockAlign)
-            . pack('v', self::BITS_PER_SAMPLE)
-            . 'data'
-            . pack('V', $dataBytes);
+            .pack('V', 36 + $dataBytes)
+            .'WAVE'
+            .'fmt '
+            .pack('V', 16)
+            .pack('v', 1)
+            .pack('v', self::NUM_CHANNELS)
+            .pack('V', self::SAMPLE_RATE)
+            .pack('V', $byteRate)
+            .pack('v', $blockAlign)
+            .pack('v', self::BITS_PER_SAMPLE)
+            .'data'
+            .pack('V', $dataBytes);
     }
 }

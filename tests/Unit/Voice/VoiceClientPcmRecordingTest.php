@@ -106,7 +106,10 @@ it('record(RecordingFormat::PCM, callable) creates the output directory when mis
     initPcmRecVc($vc);
 
     $stub = new class implements OpusDecoderInterface {
-        public function decode($data, int $channels = 2, int $audioRate = 48000): string { return "\x00\x00"; }
+        public function decode($data, int $channels = 2, int $audioRate = 48000): string
+        {
+            return "\x00\x00";
+        }
     };
     $vc->opusdecoder = $stub;
 
@@ -200,13 +203,28 @@ function makePcmRecFakeDecoder(): object
         public function __construct()
         {
             $this->stdin = new class {
-                public function isWritable(): bool { return true; }
-                public function write(string $data): bool { return true; }
-                public function close(): void {}
+                public function isWritable(): bool
+                {
+                    return true;
+                }
+                public function write(string $data): bool
+                {
+                    return true;
+                }
+                public function close(): void
+                {
+                }
             };
         }
-        public function close(): void {}
-        public function isRunning(): bool { return false; }
-        public function terminate(int $signal): void {}
+        public function close(): void
+        {
+        }
+        public function isRunning(): bool
+        {
+            return false;
+        }
+        public function terminate(int $signal): void
+        {
+        }
     };
 }

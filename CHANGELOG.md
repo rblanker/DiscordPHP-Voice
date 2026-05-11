@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/AUDIO_PIPELINE.md` — Mermaid diagrams for outbound/inbound audio pipeline, playback state machine, and audio format chain
 - `docs/TROUBLESHOOTING.md` — platform-specific fix guide for all runtime exceptions (libdave, ffmpeg, opus, libsodium, permission errors)
 - PHPStan level 5 static analysis (`composer phpstan`)
-- `composer check` aggregate script (pint + cs:check + unit)
+- `composer lint` script via `overtrue/phplint ^9.7`; folded into `composer check` aggregate
+- `composer check` aggregate script (cs:check + lint + unit)
 - `composer cs:check` dry-run style check
 - EditorConfig CI validation job
 - Comprehensive test suite expansion (581 tests): new files cover voice exceptions, VoiceClient playback guards, VoiceClient receive flow, Manager join-channel permission checks, WS gateway handlers, WS heartbeat/resume seq_ack bookkeeping, UDP transport (IP discovery + sendBuffer), Packet encrypt/decrypt roundtrip, Ogg edge cases (BOS/EOS/continued/multi-segment), Dave Runtime callback overrides, small-parts (User / HeaderValuesEnum / Dave handles / UserConnected), and process wrappers (Ffmpeg / DCA / OpusFfi)

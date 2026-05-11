@@ -23,7 +23,7 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           extensions: uv, zlib, mbstring, ffi
-          tools: phplint
+          tools: ~
       - name: Install dependencies
         run: COMPOSER_ROOT_VERSION=dev-main composer install --no-interaction --prefer-dist
       - name: Install libdave
@@ -37,7 +37,7 @@ jobs:
           DISCORDPHP_DAVE_LIBRARY: ${{ github.workspace }}/.cache/libdave/lib/libdave.so
         run: composer unit
       - name: Run PHPLint
-        run: phplint
+        run: composer lint
       - name: Run PHPStan
         run: COMPOSER_ROOT_VERSION=dev-main ./vendor/bin/phpstan analyse --no-progress
       - name: Check code style

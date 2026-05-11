@@ -179,7 +179,7 @@ CDEF;
      * @param null|callable(SessionHandle, string): ?KeyRatchetHandle $keyRatchetCallback
      * @param null|callable(DecryptorHandle, bool): bool              $decryptorPassthroughCallback
      * @param null|callable(DecryptorHandle, KeyRatchetHandle): bool  $decryptorKeyRatchetCallback
-     * @param null|callable(DecryptorHandle, string): string|false|null $decryptWithDecryptorCallback
+     * @param null|callable(DecryptorHandle, string): string|null     $decryptWithDecryptorCallback
      */
     public static function configureCallbacks(
         ?callable $frameEncryptor = null,

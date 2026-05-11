@@ -278,40 +278,6 @@ final class Packet
     }
 
     /**
-     * Initilizes the buffer with no encryption.
-     *
-     * @deprecated
-     */
-    protected function initBufferNoEncryption(string $data): void
-    {
-        $data = (string) $data;
-        $header = $this->buildHeader();
-
-        $this->buffer = Buffer::make(strlen((string) $header) + strlen($data))
-            ->write((string) $header, 0)
-            ->write($data, 12);
-    }
-
-    /**
-     * Initilizes the buffer with encryption.
-     *
-     * @deprecated 10.6.0 This method uses xsalsa20poly1305 with RTP-header-based nonce which allows nonce collision. Use AES-256-GCM encrypt() path instead.
-     */
-    protected function initBufferEncryption(string $data, string $key): void
-    {
-        $data = (string) $data;
-        $header = $this->buildHeader();
-        $nonce = new Buffer(24);
-        $nonce->write((string) $header, 0);
-
-        $data = \sodium_crypto_secretbox($data, (string) $nonce, $key);
-
-        $this->buffer = new Buffer(strlen((string) $header) + strlen($data));
-        $this->buffer->write((string) $header, 0);
-        $this->buffer->write($data, 12);
-    }
-
-    /**
      * Builds the header.
      */
     protected function buildHeader(): Buffer

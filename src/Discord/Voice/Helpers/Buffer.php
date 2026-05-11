@@ -16,7 +16,6 @@ declare(strict_types=1);
 namespace Discord\Voice\Helpers;
 
 use Discord\Voice\Exceptions\BufferTimedOutException;
-use Evenement\EventEmitter;
 use Evenement\EventEmitterTrait;
 use React\EventLoop\Loop;
 use React\EventLoop\LoopInterface;

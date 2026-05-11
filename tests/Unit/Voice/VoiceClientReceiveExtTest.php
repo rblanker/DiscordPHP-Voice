@@ -388,7 +388,9 @@ it('handleAudioData() with FFI decoder emits channel-pcm and writes PCM to decod
 
     $fakePcm = str_repeat("\x7F\x00", 960);
     $stubDecoder = new class($fakePcm) implements OpusDecoderInterface {
-        public function __construct(private string $pcm) {}
+        public function __construct(private string $pcm)
+        {
+        }
 
         public function decode($data, int $channels = 2, int $audioRate = 48000): string
         {
@@ -410,7 +412,9 @@ it('handleAudioData() with FFI decoder emits channel-pcm and writes PCM to decod
         public function __construct(\stdClass $log)
         {
             $this->stdin = new class($log) {
-                public function __construct(private \stdClass $log) {}
+                public function __construct(private \stdClass $log)
+                {
+                }
 
                 public function isWritable(): bool
                 {

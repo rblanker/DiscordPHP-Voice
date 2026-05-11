@@ -66,7 +66,6 @@ it('handleVoiceStateUpdate() ignores users with no speakingStatus entry', functi
     expect($vc->voiceDecoders)->toBe([]);
 });
 
-
 it('setMuteDeaf() throws when the client is not ready', function (): void {
     $vc = makeVcForState();
 
@@ -196,7 +195,9 @@ it('playPcmFile() rejects when path does not exist', function (): void {
     $promise = $vc->playPcmFile('/nonexistent/path/to/missing.pcm');
 
     $caught = null;
-    $promise->then(null, function ($e) use (&$caught) { $caught = $e; });
+    $promise->then(null, function ($e) use (&$caught) {
+        $caught = $e;
+    });
 
     expect($caught)->toBeInstanceOf(\Discord\Exceptions\FileNotFoundException::class);
 });

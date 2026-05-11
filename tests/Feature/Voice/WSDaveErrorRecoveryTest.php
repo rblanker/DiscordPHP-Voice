@@ -18,6 +18,7 @@ namespace Discord\Tests\Feature\Voice;
 use Discord\Discord;
 use Discord\Voice\Client\WS;
 use Discord\Voice\Dave\BinaryFrame;
+use Discord\Voice\Dave\GatewayCoordinator;
 use Discord\Voice\Dave\Runtime;
 use Discord\Voice\Dave\SessionHandle;
 use Discord\Voice\Dave\State;
@@ -85,6 +86,17 @@ function payloadFromErrorRecoverySend(mixed $payload): string
 }
 
 /**
+ * Extract the GatewayCoordinator from a WS instance.
+ */
+function getErrorRecoveryCoordinator(WS $ws): GatewayCoordinator
+{
+    $method = new \ReflectionMethod(WS::class, 'getCoordinator');
+    $method->setAccessible(true);
+
+    return $method->invoke($ws);
+}
+
+/**
  * @param array<int, mixed> $arguments
  */
 function invokeErrorRecoveryMethod(object $object, string $method, array $arguments = []): mixed
@@ -114,7 +126,7 @@ it('handleInvalidDaveTransition sends INVALID_COMMIT_WELCOME binary frame (Op 31
         $sentPayloads[] = $payload;
     }, protocolVersion: 0);
 
-    invokeErrorRecoveryMethod($ws, 'handleInvalidDaveTransition', [42]);
+    invokeErrorRecoveryMethod(getErrorRecoveryCoordinator($ws), 'handleInvalidDaveTransition', [42]);
 
     assertSentBinaryOpcode($sentPayloads, Op::VOICE_DAVE_MLS_INVALID_COMMIT_WELCOME);
 });
@@ -127,7 +139,7 @@ it('handleInvalidDaveTransition does not send key package when protocolVersion=0
         $sentPayloads[] = $payload;
     }, protocolVersion: 0);
 
-    invokeErrorRecoveryMethod($ws, 'handleInvalidDaveTransition', [7]);
+    invokeErrorRecoveryMethod(getErrorRecoveryCoordinator($ws), 'handleInvalidDaveTransition', [7]);
 
     expect($sentPayloads)->toHaveCount(1);
     assertSentBinaryOpcode($sentPayloads, Op::VOICE_DAVE_MLS_INVALID_COMMIT_WELCOME);
@@ -142,7 +154,7 @@ it('handleInvalidDaveTransition does not send key package when regenerateKeyPack
         $sentPayloads[] = $payload;
     }, protocolVersion: 1);
 
-    invokeErrorRecoveryMethod($ws, 'handleInvalidDaveTransition', [3, false]);
+    invokeErrorRecoveryMethod(getErrorRecoveryCoordinator($ws), 'handleInvalidDaveTransition', [3, false]);
 
     // Only INVALID_COMMIT_WELCOME — no KEY_PACKAGE because runtime init failed
     expect($sentPayloads)->toHaveCount(1);
@@ -162,7 +174,7 @@ it('handleInvalidDaveTransition resets DAVE state when protocolVersion=0', funct
     $fakeSession = new SessionHandle(new \stdClass());
     $state->replaceSession($fakeSession);
 
-    invokeErrorRecoveryMethod($ws, 'handleInvalidDaveTransition', [99]);
+    invokeErrorRecoveryMethod(getErrorRecoveryCoordinator($ws), 'handleInvalidDaveTransition', [99]);
 
     expect($state->protocolVersion)->toBe(0);
     expect($state->session)->toBeNull();
@@ -179,7 +191,7 @@ it('handleInvalidDaveTransition resets state cleanly when protocolVersion=1 and 
     // Must not throw, even without libdave available
     $threw = false;
     try {
-        invokeErrorRecoveryMethod($ws, 'handleInvalidDaveTransition', [1, true]);
+        invokeErrorRecoveryMethod(getErrorRecoveryCoordinator($ws), 'handleInvalidDaveTransition', [1, true]);
     } catch (\Throwable) {
         $threw = true;
     }
@@ -213,7 +225,7 @@ it('INVALID_COMMIT_WELCOME binary frame has correct wire format (opcode=31)', fu
         $sentPayloads[] = $payload;
     }, protocolVersion: 0);
 
-    invokeErrorRecoveryMethod($ws, 'handleInvalidDaveTransition', [1]);
+    invokeErrorRecoveryMethod(getErrorRecoveryCoordinator($ws), 'handleInvalidDaveTransition', [1]);
 
     expect($sentPayloads)->not->toBeEmpty();
     $frame = BinaryFrame::fromClientPayload($sentPayloads[0]);

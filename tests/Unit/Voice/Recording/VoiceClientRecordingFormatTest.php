@@ -89,7 +89,7 @@ it('WavWriter is opened per SSRC when WAV format is active', function () use ($h
 
     $ssrc = 100;
     $userId = 'user-100';
-    $wavPath = sys_get_temp_dir() . '/' . $userId . '-' . getmypid() . '.wav';
+    $wavPath = sys_get_temp_dir().'/'.$userId.'-'.getmypid().'.wav';
 
     $vc = (new \ReflectionMethod(\PHPUnit\Framework\TestCase::class, 'getMockBuilder'))
         ->invoke($this, VoiceClient::class)
@@ -102,7 +102,9 @@ it('WavWriter is opened per SSRC when WAV format is active', function () use ($h
     // Install a stub opusdecoder that returns real-looking PCM (non-empty, non-whitespace).
     $fakePcm = str_repeat("\x7F\x01", 960); // 1920 bytes of non-whitespace PCM
     $vc->opusdecoder = new class($fakePcm) implements OpusDecoderInterface {
-        public function __construct(private string $pcm) {}
+        public function __construct(private string $pcm)
+        {
+        }
 
         public function decode($data, int $channels = 2, int $audioRate = 48000): string
         {
@@ -127,7 +129,7 @@ it('WavWriter is opened per SSRC when WAV format is active', function () use ($h
     setSsrcToUserIdForRecordingFormat($vc, [$ssrc => $userId]);
 
     // Activate WAV recording.
-    $vc->record(RecordingFormat::WAV, fn (string $uid) => sys_get_temp_dir() . '/' . $uid . '-' . getmypid() . '.wav');
+    $vc->record(RecordingFormat::WAV, fn (string $uid) => sys_get_temp_dir().'/'.$uid.'-'.getmypid().'.wav');
 
     // Send one valid audio packet (> 8 bytes, not silence).
     $packet = makeReceivePacketForRecordingFormat($ssrc, str_repeat("\xAB", 32));
@@ -163,7 +165,9 @@ it('stopRecording() calls finalize() on all open WavWriters', function () use ($
     $mockWriter = new class($finalized) {
         private bool $wasCalled = false;
 
-        public function __construct(private bool &$flag) {}
+        public function __construct(private bool &$flag)
+        {
+        }
 
         public function finalize(): void
         {
@@ -276,7 +280,9 @@ function makeFakeDecoderForRecordingFormat(bool $writable): object
         public function __construct(bool $w)
         {
             $this->stdin = new class($w) {
-                public function __construct(private bool $w) {}
+                public function __construct(private bool $w)
+                {
+                }
 
                 public function isWritable(): bool
                 {

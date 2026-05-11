@@ -271,10 +271,16 @@ test('playFile() exercises the full outbound RTP+DAVE send pipeline against the 
                     if ($done) {
                         return;
                     }
-                    try { $vc->stop(); } catch (\Throwable) {}
+                    try {
+                        $vc->stop();
+                    } catch (\Throwable) {
+                    }
                     $result = 'capped';
                     $done = true;
-                    try { $vc->disconnect(); } catch (\Throwable) {}
+                    try {
+                        $vc->disconnect();
+                    } catch (\Throwable) {
+                    }
                     $discord->close();
                 });
 
@@ -286,7 +292,10 @@ test('playFile() exercises the full outbound RTP+DAVE send pipeline against the 
                         Loop::cancelTimer($cap);
                         $result = 'played';
                         $done = true;
-                        try { $vc->disconnect(); } catch (\Throwable) {}
+                        try {
+                            $vc->disconnect();
+                        } catch (\Throwable) {
+                        }
                         $discord->close();
                     },
                     function (\Throwable $e) use ($vc, $discord, &$done, &$result, &$stderr): void {
@@ -294,7 +303,10 @@ test('playFile() exercises the full outbound RTP+DAVE send pipeline against the 
                             'Playback failed: '.$e->getMessage().' | ffmpeg stderr: '.implode(' ', $stderr)
                         );
                         $done = true;
-                        try { $vc->disconnect(); } catch (\Throwable) {}
+                        try {
+                            $vc->disconnect();
+                        } catch (\Throwable) {
+                        }
                         $discord->close();
                     }
                 );
@@ -352,7 +364,9 @@ test('full session: join → play → record → disconnect in a single bot conn
         $discord->voice->joinChannel($channel, $discord, $discord->voice_sessions, deaf: false)->then(
             function (VoiceClient $vc) use ($musicFile, &$done, &$result, &$stages, &$stderr, $discord): void {
                 $stages[] = 'joined';
-                $vc->on('stderr', function (string $data) use (&$stderr): void { $stderr[] = $data; });
+                $vc->on('stderr', function (string $data) use (&$stderr): void {
+                    $stderr[] = $data;
+                });
 
                 // Stage 1: kick off playback; capture errors but don't wait for natural EOF.
                 $playFailed = false;
@@ -371,7 +385,10 @@ test('full session: join → play → record → disconnect in a single bot conn
                         return;
                     }
 
-                    try { $vc->stop(); } catch (\Throwable) {}
+                    try {
+                        $vc->stop();
+                    } catch (\Throwable) {
+                    }
                     $stages[] = 'played';
 
                     // Stage 2: record briefly, then stop.
@@ -390,7 +407,10 @@ test('full session: join → play → record → disconnect in a single bot conn
                             return;
                         }
 
-                        try { $vc->disconnect(); } catch (\Throwable) {}
+                        try {
+                            $vc->disconnect();
+                        } catch (\Throwable) {
+                        }
                         $stages[] = 'disconnected';
                         $result = 'ok';
                         $done = true;
@@ -466,7 +486,10 @@ test('record() drives the inbound UDP listener and resets recording state on sto
                     }
                     $result = 'recorded';
                     $done = true;
-                    try { $vc->disconnect(); } catch (\Throwable) {}
+                    try {
+                        $vc->disconnect();
+                    } catch (\Throwable) {
+                    }
                     $discord->close();
                 });
             },

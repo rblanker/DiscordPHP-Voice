@@ -21,6 +21,7 @@ use Discord\Parts\Voice\UserConnected;
 use Discord\Voice\Client;
 use Discord\Voice\Client\WS;
 use Discord\Voice\Dave\DecryptorHandle;
+use Discord\Voice\Dave\GatewayCoordinator;
 use Discord\Voice\Dave\KeyRatchetHandle;
 use Discord\Voice\Dave\Runtime;
 use Discord\Voice\Dave\SessionHandle;
@@ -141,7 +142,7 @@ it('prepareRemoteDaveDecryptor returns early when protocolVersion is zero', func
     $ws = makeWsForRemoteUsersTest($this);
     $state = getRemoteUsersDaveState($ws);
 
-    invokeRemoteUsersMethod($ws, 'prepareRemoteDaveDecryptor', ['user1', 0]);
+    invokeRemoteUsersMethod(getRemoteUsersCoordinator($ws), 'prepareRemoteDaveDecryptor', ['user1', 0]);
 
     expect($state->getDecryptor('user1'))->toBeNull();
 });
@@ -162,7 +163,7 @@ it('prepareRemoteDaveDecryptor handles createDecryptor failure gracefully withou
 
     // With no libdave, DaveRuntime::createDecryptor() returns null.
     // The method should log a warning and return without storing any decryptor.
-    invokeRemoteUsersMethod($ws, 'prepareRemoteDaveDecryptor', ['user1', 1]);
+    invokeRemoteUsersMethod(getRemoteUsersCoordinator($ws), 'prepareRemoteDaveDecryptor', ['user1', 1]);
 
     expect($state->getDecryptor('user1'))->toBeNull();
 });
@@ -194,7 +195,7 @@ it('prepareRemoteDaveDecryptor keeps transition passthrough while installing a n
         }
     );
 
-    invokeRemoteUsersMethod($ws, 'prepareRemoteDaveDecryptor', ['user1', 1]);
+    invokeRemoteUsersMethod(getRemoteUsersCoordinator($ws), 'prepareRemoteDaveDecryptor', ['user1', 1]);
 
     expect($calls)->toBe([
         ['passthrough', true],
@@ -258,6 +259,25 @@ function makeWsForRemoteUsersTest(TestCase $test): WS
     $ws->vc = $vcMock;
 
     return $ws;
+}
+
+/**
+ * Extract the GatewayCoordinator from a WS instance.
+ */
+function getRemoteUsersCoordinator(WS $ws): GatewayCoordinator
+{
+    $prop = new \ReflectionProperty(WS::class, 'coordinator');
+    $prop->setAccessible(true);
+
+    $coordinator = $prop->getValue($ws);
+    if (! $coordinator instanceof GatewayCoordinator) {
+        // Force lazy init by accessing getCoordinator via reflection
+        $method = new \ReflectionMethod(WS::class, 'getCoordinator');
+        $method->setAccessible(true);
+        $coordinator = $method->invoke($ws);
+    }
+
+    return $coordinator;
 }
 
 /**

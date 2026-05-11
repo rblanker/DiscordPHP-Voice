@@ -145,6 +145,12 @@ parameters:
           message: '#Comparison operation "<" between int<0, max> and 0 is always false#'
           reportUnmatched: false
 
+        # OpusFfi FFI scalar error check — ->cdata is the documented PHP FFI way to read a scalar CData value;
+        # PHPStan has no stubs for this magic property on FFI\CData
+        - path: src/Discord/Voice/Processes/OpusFfi.php
+          message: '#Access to an undefined property FFI\\CData::\$cdata#'
+          reportUnmatched: false
+
         # Runtime.php PHPDoc tag on $frameDecryptor — union with string is a legacy annotation
         - path: src/Discord/Voice/Dave/Runtime.php
           message: '#PHPDoc tag @param for parameter \$frameDecryptor with type .* is not subtype of native type#'
