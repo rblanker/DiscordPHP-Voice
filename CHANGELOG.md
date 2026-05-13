@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `VoiceClient`: incorrect `DCA` class reference (was `Dca`)
 - `VoiceClient`: float-to-int cast on timestamp calculation
 - `RecieveStream`: `write()` and `pipe()` missing return values
-- `VoiceClient::$ssrcToUserId` — changed visibility from `protected` to `public` so `WS::handleSpeaking` can write SSRC→user_id mappings from outside the class (previously threw a fatal error whenever a SPEAKING payload included an `ssrc`)
+- `VoiceClient::$ssrcToUserId` / `$speakingStatus` — `WS::handleSpeaking` now writes SSRC→user_id mappings via the new `VoiceClient::updateSpeakingStatus()` public method instead of direct property access (previously threw a fatal error whenever a SPEAKING payload included an `ssrc`)
 - `Client\WS` — binary voice gateway frames now emit the `ws-binary-message` event so DAVE binary opcodes reach the application layer
 - `Dave\State::$groupId` — fixed resolution via `isset()` on a magic `__get` property (always returned `false`); now reads directly from the backing store
 - `Client\WS` — stale MLS proposals no longer cause an infinite `INVALID_COMMIT_WELCOME` loop; three consecutive proposal failures close the socket with a descriptive error instead
@@ -55,6 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `Discord\Voice\Client\UDP` — `final` modifier removed so the class can be subclass-mocked by PHPUnit for `readOggOpus` / `sendBuffer` unit tests. There is still only one concrete implementation; no public extension point is intended.
+- **[BC break]** `VoiceClient::$speakingStatus` — narrowed from `public` to `protected`. Use `updateSpeakingStatus()` to update, or `\ReflectionProperty` to read from outside the class.
+- **[BC break]** `VoiceClient::$ssrcToUserId` — narrowed from `public` to `protected`. Access via `\ReflectionProperty` if needed externally.
+- **[BC break]** `VoiceClient::$voiceDecoders` — changed from untyped with `null` default to `public array $voiceDecoders = []`; code that tested `=== null` must be updated to `=== []` or `count() === 0`.
 - CI now triggers on push and pull_request (previously workflow_dispatch only)
 - PHP 8.0 removed from CI matrix (requires `^8.1.2`)
 - `actions/checkout` bumped to v4
