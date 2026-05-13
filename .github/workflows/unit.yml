@@ -26,6 +26,8 @@ jobs:
           tools: ~
       - name: Install dependencies
         run: COMPOSER_ROOT_VERSION=dev-main composer install --no-interaction --prefer-dist
+      - name: Install libopus
+        run: sudo apt-get install -y libopus0
       - name: Install libdave
         run: ./scripts/setup-libdave.sh
       - name: Redis Server in GitHub Actions
@@ -63,6 +65,8 @@ jobs:
           extensions: uv, zlib, mbstring, ffi, xdebug
       - name: Install dependencies
         run: COMPOSER_ROOT_VERSION=dev-main composer install --no-interaction --prefer-dist
+      - name: Install libopus
+        run: sudo apt-get install -y libopus0
       - name: Install libdave
         run: ./scripts/setup-libdave.sh
       - name: Run coverage
