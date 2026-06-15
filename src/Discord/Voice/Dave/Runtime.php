@@ -1038,9 +1038,12 @@ CDEF;
         $buffers = [];
 
         foreach (array_values($strings) as $index => $string) {
-            $buffer = $ffi->new('char['.(strlen($string) + 1).']', false);
-            FFI::memcpy($buffer, $string, strlen($string));
-            $buffer[strlen($string)] = "\0";
+            // Copy the string plus its trailing NUL in one memcpy. Offset-assigning the
+            // terminator separately ($buffer[len] = "\0") makes PHPStan on PHP 8.3 infer
+            // $buffer as array<int, string> and reject the FFI::cast() below.
+            $nullTerminated = $string."\0";
+            $buffer = $ffi->new('char['.strlen($nullTerminated).']', false);
+            FFI::memcpy($buffer, $nullTerminated, strlen($nullTerminated));
             $buffers[] = $buffer;
             $pointers[$index] = $ffi->cast('char*', $buffer);
         }

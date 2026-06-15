@@ -195,8 +195,8 @@ final class Packet
 
         // 3. Extract the nonce
         $nonce = substr($message, $len - HeaderValuesEnum::TIMESTAMP_OR_NONCE_INDEX->value, HeaderValuesEnum::TIMESTAMP_OR_NONCE_INDEX->value);
-        // 4. Pad the nonce to 12 bytes
-        $nonceBuffer = str_pad($nonce, SODIUM_CRYPTO_AEAD_AES256GCM_NPUBBYTES, "\0", STR_PAD_RIGHT);
+        // 4. Pad the nonce to 12 bytes (AES-256-GCM NPUBBYTES)
+        $nonceBuffer = str_pad($nonce, HeaderValuesEnum::RTP_HEADER_OR_NONCE_LENGTH->value, "\0", STR_PAD_RIGHT);
 
         // 5. Extract the ciphertext and auth tag
         //    The message: [header][ciphertext][auth tag][nonce]
@@ -266,9 +266,9 @@ final class Packet
             throw new \LogicException('Nonce must be set before encrypting a packet.');
         }
 
-        // pad nonce to 12 bytes for AES 256 GCM
+        // pad nonce to 12 bytes for AES 256 GCM (NPUBBYTES)
         $nonce = pack('V', $this->nonce);
-        $paddedNonce = str_pad($nonce, SODIUM_CRYPTO_AEAD_AES256GCM_NPUBBYTES, "\0", STR_PAD_RIGHT);
+        $paddedNonce = str_pad($nonce, HeaderValuesEnum::RTP_HEADER_OR_NONCE_LENGTH->value, "\0", STR_PAD_RIGHT);
 
         // encrypt the audio
         $this->encryptedAudio = sodium_crypto_aead_aes256gcm_encrypt($this->decryptedAudio, $header, $paddedNonce, $this->key);
