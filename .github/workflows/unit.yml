@@ -9,7 +9,9 @@ jobs:
     name: Pest and Lint
     runs-on: ubuntu-latest
     if: "github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message || '', 'no test')"
-    concurrency: pest
+    concurrency:
+      group: pest-${{ github.ref }}-${{ matrix.php }}
+      cancel-in-progress: true
     strategy:
       matrix:
         php:
@@ -17,7 +19,7 @@ jobs:
           - '8.3'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -31,7 +33,7 @@ jobs:
       - name: Install libdave
         run: ./scripts/setup-libdave.sh
       - name: Redis Server in GitHub Actions
-        uses: supercharge/redis-github-action@1.4.0
+        uses: supercharge/redis-github-action@1.8.1
       # - name: Memcached Service
       #   uses: niden/actions-memcached@v7
       - name: Run Pest
@@ -49,7 +51,7 @@ jobs:
     name: EditorConfig
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: editorconfig-checker/action-editorconfig-checker@v2
 
   coverage:
@@ -57,7 +59,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -75,7 +77,7 @@ jobs:
           DISCORDPHP_DAVE_LIBRARY: ${{ github.workspace }}/.cache/libdave/lib/libdave.so
         run: ./vendor/bin/pest --coverage-clover coverage.xml
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
           files: coverage.xml
           fail_ci_if_error: false
