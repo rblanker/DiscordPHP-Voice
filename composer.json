@@ -27,7 +27,7 @@
         "overtrue/phplint": "^9.7",
         "pestphp/pest": "^4.1.2",
         "phpstan/phpstan": "^2.1",
-        "team-reflex/discord-php": "dev-master"
+        "team-reflex/discord-php": "^10.48.12 || dev-master"
     },
     "autoload": {
         "psr-4": {
